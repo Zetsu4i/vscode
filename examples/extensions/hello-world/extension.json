@@ -1,0 +1,25 @@
+{
+  "id": "acme.hello",
+  "name": "hello",
+  "publisher": "acme",
+  "version": "0.1.0",
+  "description": "The canonical sample extension: contributes a command, a keybinding and a theme placeholder. The WASM runtime that executes main lands in Phase 3 (see docs/ROADMAP.md).",
+  "main": "extension.wasm",
+  "activationEvents": ["onCommand:hello.world"],
+  "contributes": {
+    "commands": [
+      {
+        "command": "hello.world",
+        "title": "Hello World",
+        "category": "Hello"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "hello.world",
+        "key": "ctrl+alt+h"
+      }
+    ],
+    "themes": []
+  }
+}
