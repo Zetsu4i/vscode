@@ -1,0 +1,18 @@
+{
+	"name": "code-oss-desktop-tauri",
+	"version": "1.137.0",
+	"private": true,
+	"description": "Tauri-based desktop shell for Code - OSS. Bundles the VS Code server (extension host, terminals, filesystem) behind an OS-webview window instead of Electron.",
+	"license": "MIT",
+	"type": "module",
+	"scripts": {
+		"prepare-server": "node scripts/prepare-server.mjs",
+		"icons": "tauri icon icons-src/app-icon.png",
+		"dev": "tauri dev",
+		"build": "tauri build",
+		"tauri": "tauri"
+	},
+	"devDependencies": {
+		"@tauri-apps/cli": "^2.1.0"
+	}
+}

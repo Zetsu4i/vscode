@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<title>Code - OSS</title>
+	<style>
+		:root {
+			color-scheme: dark;
+		}
+
+		html,
+		body {
+			height: 100%;
+			margin: 0;
+			background: #1f1f1f;
+			color: #cccccc;
+			font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Ubuntu", "Droid Sans", sans-serif;
+			-webkit-user-select: none;
+			user-select: none;
+			overflow: hidden;
+		}
+
+		.stage {
+			height: 100%;
+			display: flex;
+			flex-direction: column;
+			align-items: center;
+			justify-content: center;
+			gap: 22px;
+		}
+
+		.logo {
+			width: 96px;
+			height: 96px;
+			border-radius: 20px;
+			display: grid;
+			place-items: center;
+			background: linear-gradient(135deg, #0098ff 0%, #0065a9 100%);
+			box-shadow: 0 12px 40px rgba(0, 122, 204, 0.35);
+			font-size: 44px;
+			font-weight: 700;
+			color: #fff;
+			letter-spacing: -2px;
+		}
+
+		.spinner {
+			width: 26px;
+			height: 26px;
+			border: 3px solid rgba(255, 255, 255, 0.15);
+			border-top-color: #0098ff;
+			border-radius: 50%;
+			animation: spin 0.9s linear infinite;
+		}
+
+		@keyframes spin {
+			to {
+				transform: rotate(360deg);
+			}
+		}
+
+		#status {
+			font-size: 13px;
+			color: #9d9d9d;
+			max-width: 560px;
+			text-align: center;
+			line-height: 1.55;
+			padding: 0 24px;
+		}
+
+		.error .spinner {
+			display: none;
+		}
+
+		.error #status {
+			color: #f48771;
+			white-space: pre-wrap;
+		}
+	</style>
+</head>
+<body>
+	<div class="stage" id="stage">
+		<div class="logo">&lt;/&gt;</div>
+		<div class="spinner"></div>
+		<div id="status">Starting Code&nbsp;&mdash;&nbsp;launching the VS&nbsp;Code server&hellip;</div>
+	</div>
+	<script>
+		// Called by the Rust shell (window.eval) while the splash is visible.
+		window.setStatus = function (text) {
+			document.getElementById('status').textContent = text;
+		};
+		window.showError = function (message) {
+			document.getElementById('stage').classList.add('error');
+			document.getElementById('status').textContent = message;
+		};
+	</script>
+</body>
+</html>

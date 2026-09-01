@@ -1,0 +1,58 @@
+{
+	"$schema": "https://schema.tauri.app/config/2",
+	"productName": "Code - OSS",
+	"version": "1.137.0",
+	"identifier": "org.code-oss.tauri",
+	"build": {
+		"frontendDist": "../splash"
+	},
+	"app": {
+		"windows": [
+			{
+				"label": "main",
+				"title": "Code - OSS",
+				"width": 1400,
+				"height": 900,
+				"minWidth": 700,
+				"minHeight": 500,
+				"center": true,
+				"resizable": true,
+				"backgroundColor": "#1f1f1f",
+				"zoomHotkeysEnabled": true
+			}
+		],
+		"security": {
+			"csp": null
+		}
+	},
+	"bundle": {
+		"active": true,
+		"targets": "all",
+		"category": "DeveloperTool",
+		"shortDescription": "Code editing. Redefined.",
+		"longDescription": "Code - OSS packaged as a lightweight Tauri application. The full VS Code workbench, extension host, integrated terminal and filesystem support are provided by the bundled VS Code server; the UI runs in the operating system webview instead of a bundled Chromium.",
+		"icon": [
+			"icons/32x32.png",
+			"icons/128x128.png",
+			"icons/128x128@2x.png",
+			"icons/icon.icns",
+			"icons/icon.ico"
+		],
+		"resources": {
+			"../server-dist": "server"
+		},
+		"linux": {
+			"deb": {
+				"depends": ["libwebkit2gtk-4.1-0", "libgtk-3-0"]
+			}
+		},
+		"macOS": {
+			"minimumSystemVersion": "10.15"
+		},
+		"windows": {
+			"webviewInstallMode": {
+				"type": "downloadBootstrapper"
+			}
+		}
+	}
+}
