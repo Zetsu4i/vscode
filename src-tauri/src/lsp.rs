@@ -325,8 +325,40 @@ pub async fn lsp_did_change(
     state: State<'_, LspState>,
     language: String,
     path: String,
-    text: String,
+    changes: Value,
     version: i64,
+) -> Result<(), String> {
+    let server = state
+        .servers
+        .lock()
+        .await
+        .get(&language)
+        .cloned()
+        .ok_or_else(|| format!("LSP '{}' is not running", language))?;
+    // `changes` is an array of LSP TextDocumentContentChangeEvent values:
+    // { range?: { start: {line, character}, end: {line, character} }, text: String }
+    // A missing/null range means a full-document replacement.
+    let content_changes = match changes {
+        Value::Array(arr) => arr,
+        Value::String(text) => vec![json!({ "text": text })],
+        _ => vec![],
+    };
+    send_notification(
+        &server,
+        "textDocument/didChange",
+        json!({
+            "textDocument": { "uri": path_to_uri(&path), "version": version },
+            "contentChanges": content_changes
+        }),
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn lsp_did_save(
+    state: State<'_, LspState>,
+    language: String,
+    path: String,
 ) -> Result<(), String> {
     let server = state
         .servers
@@ -337,11 +369,8 @@ pub async fn lsp_did_change(
         .ok_or_else(|| format!("LSP '{}' is not running", language))?;
     send_notification(
         &server,
-        "textDocument/didChange",
-        json!({
-            "textDocument": { "uri": path_to_uri(&path), "version": version },
-            "contentChanges": [{ "text": text }]
-        }),
+        "textDocument/didSave",
+        json!({ "textDocument": { "uri": path_to_uri(&path) } }),
     )
     .await
 }

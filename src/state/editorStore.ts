@@ -308,6 +308,13 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     try {
       await ipc.writeFile(target, buf.text);
       get().markSaved(target);
+      // Notify the language server the document was saved.
+      const { languageForPath } = await import("../util/paths");
+      const lang = languageForPath(target);
+      const { useWorkspaceStore } = await import("./workspaceStore");
+      if (lang && useWorkspaceStore.getState().root) {
+        void ipc.lspDidSave(lang, target).catch(() => {});
+      }
       return true;
     } catch (e) {
       console.error("save failed", e);

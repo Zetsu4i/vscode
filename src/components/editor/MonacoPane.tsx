@@ -202,21 +202,30 @@ function attachModelHooks(model: monaco.editor.ITextModel, path: string): void {
   if (hookedModels.has(model)) return;
   hookedModels.add(model);
 
-  model.onDidChangeContent(() => {
+  model.onDidChangeContent((e) => {
     const text = model.getValue();
     useEditorStore.getState().setText(path, text);
     const b = useEditorStore.getState().buffers[path];
     const root = useWorkspaceStore.getState().root;
     const langId = languageForPath(path);
     if (b && root && langId) {
-      // Debounced full-text didChange (incremental sync lands with Phase 1 LSP work)
+      // Incremental sync: forward Monaco's ranged edits as LSP content changes.
+      // Monaco orders changes from the end of the document backwards, which
+      // matches LSP's sequential application semantics.
+      const changes = e.changes.map((c) => ({
+        range: {
+          start: { line: c.range.startLineNumber - 1, character: c.range.startColumn - 1 },
+          end: { line: c.range.endLineNumber - 1, character: c.range.endColumn - 1 },
+        },
+        text: c.text,
+      }));
       window.clearTimeout(
         (model as unknown as { _lspTimer?: number })._lspTimer
       );
       (model as unknown as { _lspTimer?: number })._lspTimer = window.setTimeout(
         () => {
           void ipc
-            .lspDidChange(langId, path, b.text, b.version)
+            .lspDidChange(langId, path, changes, b.version)
             .catch(() => {});
         },
         400

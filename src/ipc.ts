@@ -77,6 +77,15 @@ export interface LspDiagnostic {
   source?: string;
 }
 
+/** LSP TextDocumentContentChangeEvent — range omitted = full replace. */
+export interface LspContentChange {
+  range?: {
+    start: { line: number; character: number };
+    end: { line: number; character: number };
+  };
+  text: string;
+}
+
 // ---------- command wrappers ----------
 
 export const ipc = {
@@ -149,9 +158,11 @@ export const ipc = {
   lspDidChange: (
     language: string,
     path: string,
-    text: string,
+    changes: LspContentChange[],
     version: number
-  ) => invoke<void>("lsp_did_change", { language, path, text, version }),
+  ) => invoke<void>("lsp_did_change", { language, path, changes, version }),
+  lspDidSave: (language: string, path: string) =>
+    invoke<void>("lsp_did_save", { language, path }),
   lspCompletion: (language: string, path: string, line: number, character: number) =>
     invoke<Record<string, unknown>[]>("lsp_completion", {
       language,

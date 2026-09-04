@@ -61,6 +61,7 @@ pub fn run() {
             lsp::lsp_status,
             lsp::lsp_did_open,
             lsp::lsp_did_change,
+            lsp::lsp_did_save,
             lsp::lsp_completion,
             lsp::lsp_hover,
             // extensions
