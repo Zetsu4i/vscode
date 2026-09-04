@@ -1,0 +1,43 @@
+diff --git a/src/vs/workbench/browser/web.main.ts b/src/vs/workbench/browser/web.main.ts
+index a2f09581..b1d70f2d 100644
+--- a/src/vs/workbench/browser/web.main.ts
++++ b/src/vs/workbench/browser/web.main.ts
+@@ -81,6 +81,13 @@ import { windowLogGroup, windowLogId } from '../services/log/common/logConstants
+ import { LogService } from '../../platform/log/common/logService.js';
+ import { IRemoteSocketFactoryService, RemoteSocketFactoryService } from '../../platform/remote/common/remoteSocketFactoryService.js';
+ import { BrowserSocketFactory } from '../../platform/remote/browser/browserSocketFactory.js';
++// --- VSTauri bridge (added) ---
++import { SyncDescriptor } from '../../platform/instantiation/common/syncDescriptor.js';
++import { IFileDialogService } from '../../platform/dialogs/common/dialogs.js';
++import '../contrib/tauriBridge/browser/tauri.contribution.js';
++import { TauriBridge } from '../contrib/tauriBridge/common/tauriBridge.js';
++import { TauriFileSystemProvider } from '../contrib/tauriBridge/browser/tauriFileSystemProvider.js';
++import { TauriFileDialogService } from '../contrib/tauriBridge/browser/tauriFileDialogService.js';
+ import { VSBuffer } from '../../base/common/buffer.js';
+ import { IStoredWorkspace } from '../../platform/workspaces/common/workspaces.js';
+ import { UserDataProfileInitializer } from '../services/userDataProfile/browser/userDataProfileInit.js';
+@@ -331,6 +338,11 @@ export class BrowserMain extends Disposable {
+ 		const signService = new SignService(productService);
+ 		serviceCollection.set(ISignService, signService);
+ 
++		// --- VSTauri bridge (added): native file dialogs ---
++		if (TauriBridge.get()) {
++			serviceCollection.set(IFileDialogService, new SyncDescriptor(TauriFileDialogService, undefined, true));
++		}
++
+ 
+ 		// !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+ 		//
+@@ -553,7 +565,11 @@ export class BrowserMain extends Disposable {
+ 		fileService.registerProvider(Schemas.vscodeUserData, userDataProvider);
+ 
+ 		// Local file access (if supported by browser)
+-		if (WebFileSystemAccess.supported(mainWindow)) {
++		// --- VSTauri bridge (added): real file system from the Rust backbone takes
++		// precedence; upstream browser FSA provider stays as fallback ---
++		if (TauriBridge.get()) {
++			fileService.registerProvider(Schemas.file, new TauriFileSystemProvider(TauriBridge.get()!));
++		} else if (WebFileSystemAccess.supported(mainWindow)) {
+ 			fileService.registerProvider(Schemas.file, new HTMLFileSystemProvider(indexedDB, handlesStore, logService));
+ 		}
+ 
