@@ -13,7 +13,7 @@ the same workflow.
 
 ---
 
-## Status — Phase 0: Foundation
+## Status — Phase 1: Editing Depth
 
 | Area | Status | Notes |
 |---|---|---|
@@ -22,6 +22,13 @@ the same workflow.
 | File system backend | ✅ | Rust `std::fs` commands, binary detection, 5 MB guard |
 | File watching | ✅ | `notify` + debounce, live tree refresh |
 | Monaco editor | ✅ | Same engine as VSCode, tabs, dirty state, per-tab view state |
+| **Editor groups (split editor)** | ✅ | Binary split grid, resizable splitters, tab drag-reorder + drag across groups |
+| **LSP sync** | ✅ | Incremental ranged `didChange` + `didSave` |
+| **Replace across workspace** | ✅ | Regex/literal/word flags, `$1` captures, open buffers stay in sync |
+| **Breadcrumbs + sticky scroll** | ✅ | Path crumbs with explorer reveal; toggleable sticky scroll |
+| **Editor settings** | ✅ | Font zoom, ligatures, minimap, word wrap, whitespace (persisted) |
+| **Hex viewer** | ✅ | Virtualized offset/hex/ASCII grid for binaries; large-file banner |
+| **Language configuration** | ✅ | Region folding, proto config, markdown list continuation |
 | Terminal | ✅ | Real PTY (`portable-pty`), xterm.js, colors, resize, multiple terminals |
 | Global search | ✅ | ripgrep's engine (`regex`) + walker (`ignore`), .gitignore-aware |
 | Source control (git) | ✅ | status, stage/unstage, commit, Monaco diff editor |
@@ -93,7 +100,7 @@ Override or add servers per workspace with `.vstauri/lsp.json`:
 }
 ```
 
-## Keybindings (Phase 0 set)
+## Keybindings
 
 | Keys | Action |
 |---|---|
@@ -105,6 +112,9 @@ Override or add servers per workspace with `.vstauri/lsp.json`:
 | `Ctrl+S` | Save |
 | `Ctrl+W` | Close editor |
 | `Ctrl+N` | New file |
+| `Ctrl+\` | Split editor right |
+| `Ctrl+=` / `Ctrl+-` | Font zoom in / out |
+| `Alt+Z` | Toggle word wrap |
 | `Ctrl+Shift+E / F / G / M` | Explorer / Search / SCM / Problems |
 
 ## Architecture in one screen

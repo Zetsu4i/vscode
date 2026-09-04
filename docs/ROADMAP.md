@@ -19,15 +19,20 @@ working app. Nothing merges if the app does not run.
 - [x] Extension manifests + discovery + runtime trait
 - [x] CI: Linux (deb/AppImage) + Windows (NSIS/MSI) installers
 
-## Phase 1 — Editing depth
+## Phase 1 — Editing depth ✅
 
-- [ ] Incremental document sync for LSP
-- [ ] Find & replace inside file (Monaco) and across workspace (search view)
-- [ ] Tab drag-reorder, split editor (vertical/horizontal groups)
-- [ ] Breadcrumbs; sticky scroll
-- [ ] Language configuration per filetype (comments, brackets, folding)
-- [ ] Large-file streaming reads; "Open in hex viewer" for binaries
-- [ ] Editor settings: font size/ligatures, minimap toggle, word wrap, whitespace
+- [x] Incremental document sync for LSP (ranged `didChange` + `didSave`)
+- [x] Find & replace inside file (Monaco find widget) and across workspace
+      (search view replace-all with confirmation; open buffers resync)
+- [x] Tab drag-reorder, split editor (vertical/horizontal groups, resizable
+      binary split grid, tab drag across groups)
+- [x] Breadcrumbs (path crumbs with explorer reveal); sticky scroll
+- [x] Language configuration per filetype (region folding markers, proto
+      config, markdown list continuation)
+- [x] Large-file handling: 256 KB capped byte reads + virtualized hex viewer
+      for binaries; truncation banner for oversized text files
+- [x] Editor settings: font size/ligatures, minimap toggle, word wrap,
+      whitespace rendering, tab size (persisted; palette commands + keys)
 
 ## Phase 2 — Personalization
 
