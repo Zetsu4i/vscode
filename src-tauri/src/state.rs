@@ -1,0 +1,104 @@
+//! Shared application state: token, client directory, broadcast event bus,
+//! the PTY registry and the file watcher registry.
+
+use rand::Rng;
+use std::collections::HashMap;
+use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
+
+use crate::server::fs::WatcherEntry;
+use crate::server::pty::PtyEntry;
+
+pub struct AppState {
+    /// Per-session random token; every bridge call and websocket must present it.
+    pub token: String,
+    /// Directory containing the built vscode-web client (out/, extensions/, ...).
+    pub client_dir: PathBuf,
+    /// product.json contents served to the workbench as `productConfiguration`.
+    pub product_json: serde_json::Value,
+    /// Port the backbone bound (0 -> random assigned by the OS).
+    port_bound: AtomicPort,
+    /// Event bus: fanned out to every connected websocket client.
+    pub events: tokio::sync::broadcast::Sender<String>,
+    pub ptys: Mutex<HashMap<u32, PtyEntry>>,
+    pub watchers: Mutex<HashMap<u32, WatcherEntry>>,
+    next_watch_id: std::sync::atomic::AtomicU32,
+    shutting_down: AtomicBool,
+}
+
+struct AtomicPort(std::sync::atomic::AtomicU16);
+
+impl AppState {
+    pub fn new(client_dir: PathBuf) -> Result<Arc<Self>, String> {
+        let product_path = client_dir.join("product.json");
+        let product_json: serde_json::Value = if product_path.exists() {
+            serde_json::from_slice(
+                &std::fs::read(&product_path).map_err(|e| format!("read product.json: {e}"))?,
+            )
+            .map_err(|e| format!("parse product.json: {e}"))?
+        } else {
+            serde_json::json!({
+                "nameShort": "Code",
+                "nameLong": "Visual Studio Code",
+                "applicationName": "code",
+                "dataFolderName": ".vscode",
+                "version": env!("CARGO_PKG_VERSION"),
+                "quality": "stable"
+            })
+        };
+
+        let token: String = rand::thread_rng()
+            .sample_iter(&rand::distributions::Alphanumeric)
+            .take(48)
+            .map(char::from)
+            .collect();
+
+        let (events, _) = tokio::sync::broadcast::channel(4096);
+
+        Ok(Arc::new(Self {
+            token,
+            client_dir,
+            product_json,
+            port_bound: AtomicPort(std::sync::atomic::AtomicU16::new(0)),
+            events,
+            ptys: Mutex::new(HashMap::new()),
+            watchers: Mutex::new(HashMap::new()),
+            next_watch_id: std::sync::atomic::AtomicU32::new(1),
+            shutting_down: AtomicBool::new(false),
+        }))
+    }
+
+    pub fn set_port(&self, port: u16) {
+        self.port_bound.0.store(port, Ordering::SeqCst);
+    }
+
+    #[allow(dead_code)] // used by tooling/tests; the window gets the port at startup
+    pub fn port(&self) -> u16 {
+        self.port_bound.0.load(Ordering::SeqCst)
+    }
+
+    pub fn next_watch_id(&self) -> u32 {
+        self.next_watch_id.fetch_add(1, Ordering::SeqCst)
+    }
+
+    /// Publish an event to all websocket clients.
+    pub fn broadcast(&self, event: &str, payload: serde_json::Value) {
+        if self.shutting_down.load(Ordering::SeqCst) {
+            return;
+        }
+        let msg = serde_json::json!({ "event": event, "payload": payload }).to_string();
+        let _ = self.events.send(msg);
+    }
+
+    /// Kill all ptys and stop watchers (app exit).
+    pub fn shutdown(&self) {
+        self.shutting_down.store(true, Ordering::SeqCst);
+        if let Ok(mut ptys) = self.ptys.lock() {
+            ptys.clear(); // PtyEntry Drop kills children
+        }
+        if let Ok(mut watchers) = self.watchers.lock() {
+            watchers.clear();
+        }
+    }
+}
