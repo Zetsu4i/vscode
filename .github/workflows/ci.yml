@@ -1,0 +1,184 @@
+name: CI
+
+on:
+  push:
+    branches: [tauri-rebuild, main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  UPSTREAM_REPO: microsoft/vscode
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # 1. Build the REAL Visual Studio Code web client from the pinned upstream
+  # ---------------------------------------------------------------------------
+  build-client:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.pin.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read upstream pin
+        id: pin
+        run: |
+          echo "tag=$(cat UPSTREAM_TAG)" >> "$GITHUB_OUTPUT"
+          echo "sha=$(cat UPSTREAM_SHA)" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout pinned upstream vscode
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.UPSTREAM_REPO }}
+          ref: ${{ steps.pin.outputs.tag }}
+          path: upstream
+          fetch-depth: 1
+
+      - name: Verify pinned SHA
+        run: |
+          actual="$(git -C upstream rev-parse HEAD)"
+          echo "upstream at $actual, pinned $(cat UPSTREAM_SHA)"
+          [ "$actual" = "$(cat UPSTREAM_SHA)" ] || { echo "::error::SHA mismatch"; exit 1; }
+
+      - name: Setup node (upstream .nvmrc)
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: upstream/.nvmrc
+          cache: npm
+          cache-dependency-path: upstream/package-lock.json
+
+      - name: Install build prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3 make build-essential \
+            libx11-dev libxkbfile-dev libsecret-1-dev libkrb5-dev
+
+      - name: Prepare client tree (copy bridge, apply patches)
+        run: |
+          chmod +x scripts/*.sh
+          ./scripts/prepare-client.sh
+
+      - name: npm ci
+        working-directory: upstream
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: 1
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
+        run: npm ci --no-audit --no-fund
+
+      - name: Build vscode-web client (gulp vscode-web)
+        working-directory: upstream
+        run: npm run gulp vscode-web
+
+      - name: Upload client artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vscode-web-client
+          path: vscode-web/
+          retention-days: 7
+
+  # ---------------------------------------------------------------------------
+  # 2. Bundle native installers (Linux: deb+AppImage, Windows: NSIS ONLY)
+  # ---------------------------------------------------------------------------
+  bundle:
+    needs: build-client
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            name: linux
+          - os: windows-latest
+            name: windows
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download client build
+        uses: actions/download-artifact@v4
+        with:
+          name: vscode-web-client
+          path: src-tauri/resources/client
+
+      - name: Install Rust (stable, cached)
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          key: ${{ matrix.name }}
+
+      - name: Linux prerequisites (webkit2gtk etc.)
+        if: matrix.name == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file \
+            libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev patchelf
+
+      - name: Install tauri-cli
+        run: cargo install tauri-cli --version '^2' --locked
+
+      - name: Build Linux bundles (deb + AppImage)
+        if: matrix.name == 'linux'
+        run: cargo tauri build
+
+      - name: Build Windows bundle (NSIS only)
+        if: matrix.name == 'windows'
+        run: cargo tauri build --config src-tauri/tauri.windows.conf.json
+
+      - name: Upload Linux installers
+        if: matrix.name == 'linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: installers-linux
+          path: |
+            src-tauri/target/release/bundle/deb/*.deb
+            src-tauri/target/release/bundle/appimage/*.AppImage
+          retention-days: 7
+
+      - name: Upload Windows installer (NSIS)
+        if: matrix.name == 'windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: installers-windows
+          path: src-tauri/target/release/bundle/nsis/*-setup.exe
+          retention-days: 7
+
+  # ---------------------------------------------------------------------------
+  # 3. Release every successful build
+  # ---------------------------------------------------------------------------
+  release:
+    needs: [build-client, bundle]
+    if: ${{ always() && needs.build-client.result == 'success' && needs.bundle.result == 'success' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download all installers
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          pattern: installers-*
+          merge-multiple: true
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: dev-${{ github.run_number }}
+          name: "Dev build ${{ github.run_number }} (upstream ${{ needs.build-client.outputs.tag }})"
+          body: |
+            Automated build of `${{ github.sha }}`.
+
+            - **Windows**: `*-setup.exe` (NSIS)
+            - **Linux**: `*.deb`, `*.AppImage`
+
+            The bundled UI is the pristine Visual Studio Code web workbench
+            (upstream ${{ needs.build-client.outputs.tag }}) served by the Rust backbone.
+          prerelease: true
+          files: |
+            dist/*.exe
+            dist/*.deb
+            dist/*.AppImage

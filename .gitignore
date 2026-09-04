@@ -15,3 +15,10 @@ npm-debug.log*
 Thumbs.db
 .idea/
 *.swp
+
+# upstream vscode clone - fetched via scripts/fetch-upstream.sh, never committed
+/upstream/
+
+vscode-web/
+src-tauri/resources/client/
+dist-client/
