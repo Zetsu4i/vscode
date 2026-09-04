@@ -54,3 +54,9 @@ dist
 .v[0-9]*/
 # Local agent validation evidence
 .agent-validation/
+
+# Rust / Tauri build artifacts
+src-tauri/target/
+src-tauri/gen/
+src-tauri/gen/**/*.sln
+src-tauri/gen/**/*.vcxproj*
