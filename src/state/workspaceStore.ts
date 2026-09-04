@@ -52,12 +52,17 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     }
     await get().loadDir(norm, true);
     useGitStore.getState().refresh();
+    // Pick up <root>/.vstauri/settings.json now that a folder is open.
+    const { useSettingsStore } = await import("./settingsStore");
+    await useSettingsStore.getState().reloadWorkspaceScope();
   },
 
   closeFolder: () => {
     set({ root: null, rootName: "", tree: {}, expanded: {} });
     localStorage.removeItem(LS_KEY);
     useGitStore.getState().reset();
+    // Drop workspace-level setting overrides.
+    void import("./settingsStore").then((m) => m.useSettingsStore.getState().reloadWorkspaceScope());
   },
 
   loadDir: async (dir, force = false) => {

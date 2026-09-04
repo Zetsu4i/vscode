@@ -9,6 +9,7 @@
 //! - `lsp`     — generic LSP client (stdio transport) for diagnostics/hover/completion
 //! - `ext`     — Rust-native extension system (manifests + WASM runtime scaffolding)
 
+mod config;
 mod ext;
 mod fs;
 mod gitcmd;
@@ -68,6 +69,10 @@ pub fn run() {
             lsp::lsp_hover,
             // extensions
             ext::list_extensions,
+            // config (settings.json / keybindings.json / session state)
+            config::config_read,
+            config::config_write,
+            config::config_path,
         ])
         .on_window_event(|window, event| {
             // Make sure we never leave orphan shells behind.

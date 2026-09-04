@@ -198,6 +198,27 @@ export const ipc = {
   // extensions
   listExtensions: (root?: string) =>
     invoke<InstalledExtension[]>("list_extensions", { root: root ?? null }),
+
+  // config (settings.json, keybindings.json, session state)
+  configRead: (scope: "user" | "workspace", name: string, root?: string) =>
+    invoke<unknown>("config_read", {
+      scope,
+      name,
+      root: scope === "workspace" ? (root ?? null) : null,
+    }),
+  configWrite: (scope: "user" | "workspace", name: string, value: unknown, root?: string) =>
+    invoke<void>("config_write", {
+      scope,
+      name,
+      value,
+      root: scope === "workspace" ? (root ?? null) : null,
+    }),
+  configPath: (scope: "user" | "workspace", name: string, root?: string) =>
+    invoke<string | null>("config_path", {
+      scope,
+      name,
+      root: scope === "workspace" ? (root ?? null) : null,
+    }),
 };
 
 // ---------- event listeners ----------

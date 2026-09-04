@@ -6,6 +6,7 @@ import { useWorkspaceStore } from "./state/workspaceStore";
 import { useEditorStore, selectActiveTab } from "./state/editorStore";
 import { useTerminalStore } from "./state/terminalStore";
 import { useSearchStore } from "./state/searchStore";
+import { useSettingsStore } from "./state/settingsStore";
 import { onFsChanged, onSearchProgress, onSearchDone } from "./ipc";
 import { baseName } from "./util/paths";
 
@@ -22,8 +23,9 @@ import { InputDialog, ConfirmDialog } from "./components/dialogs/Dialogs";
 export default function App() {
   useKeybindings();
 
-  // Restore last workspace + wire global backend events
+  // Restore settings, then last workspace + wire global backend events
   useEffect(() => {
+    void useSettingsStore.getState().init();
     void useWorkspaceStore.getState().initFromSaved();
 
     const unFs = onFsChanged(() => {
