@@ -45,6 +45,7 @@ pub fn run() {
             pty::kill_pty,
             // search
             search::search_workspace,
+            search::replace_all,
             // git
             gitcmd::git_is_repo,
             gitcmd::git_status,

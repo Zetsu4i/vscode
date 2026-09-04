@@ -33,6 +33,8 @@ function HitLine({ hit, onOpen }: { hit: SearchHit; onOpen: () => void }) {
 export default function SearchView() {
   const query = useSearchStore((s) => s.query);
   const setQuery = useSearchStore((s) => s.setQuery);
+  const replace = useSearchStore((s) => s.replace);
+  const setReplace = useSearchStore((s) => s.setReplace);
   const caseSensitive = useSearchStore((s) => s.caseSensitive);
   const wholeWord = useSearchStore((s) => s.wholeWord);
   const regex = useSearchStore((s) => s.regex);
@@ -41,13 +43,16 @@ export default function SearchView() {
   const toggleRegex = useSearchStore((s) => s.toggleRegex);
   const results = useSearchStore((s) => s.results);
   const searching = useSearchStore((s) => s.searching);
+  const replacing = useSearchStore((s) => s.replacing);
   const filesScanned = useSearchStore((s) => s.filesScanned);
   const truncated = useSearchStore((s) => s.truncated);
   const run = useSearchStore((s) => s.run);
+  const replaceAll = useSearchStore((s) => s.replaceAll);
   const root = useWorkspaceStore((s) => s.root);
   const openFile = useEditorStore((s) => s.openFile);
   const requestReveal = useUiStore((s) => s.requestReveal);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const [replaceOpen, setReplaceOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -93,6 +98,13 @@ export default function SearchView() {
 
       <div className="search-box">
         <div className="search-input-row">
+          <button
+            className={`toggle-btn ${replaceOpen ? "on" : ""}`}
+            title={replaceOpen ? "Hide Replace" : "Toggle Replace"}
+            onClick={() => setReplaceOpen((v) => !v)}
+          >
+            <i className={`codicon ${replaceOpen ? "codicon-chevron-down" : "codicon-chevron-right"}`} />
+          </button>
           <input
             ref={inputRef}
             className="search-input"
@@ -125,6 +137,32 @@ export default function SearchView() {
             .*
           </button>
         </div>
+        {replaceOpen && (
+          <div className="search-input-row search-replace-row">
+            <span className="search-replace-spacer" />
+            <input
+              className="search-input"
+              placeholder="Replace"
+              value={replace}
+              disabled={!root}
+              onChange={(e) => setReplace(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  void replaceAll();
+                }
+              }}
+            />
+            <button
+              className="toggle-btn"
+              title={`Replace All${results.length ? ` (${results.length} results)` : ""}`}
+              disabled={!root || results.length === 0 || replacing || searching}
+              onClick={() => void replaceAll()}
+            >
+              <i className="codicon codicon-replace-all" />
+            </button>
+          </div>
+        )}
       </div>
 
       {root ? (
@@ -132,6 +170,7 @@ export default function SearchView() {
           {searching && (
             <div className="search-status">Searching... {filesScanned} files scanned</div>
           )}
+          {replacing && <div className="search-status">Replacing...</div>}
           {!searching && query && (
             <div className="search-status">
               {results.length === 0

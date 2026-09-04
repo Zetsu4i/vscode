@@ -577,6 +577,24 @@ textarea:focus {
   outline: 1px solid var(--accent);
 }
 
+.toggle-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.toggle-btn:disabled:hover {
+  background: transparent;
+}
+
+.search-replace-row {
+  margin-top: 4px;
+}
+
+.search-replace-spacer {
+  width: 20px;
+  flex-shrink: 0;
+}
+
 .search-results {
   flex: 1;
   overflow-y: auto;

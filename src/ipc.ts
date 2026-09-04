@@ -131,6 +131,23 @@ export const ipc = {
       wholeWord,
     }),
 
+  replaceAll: (
+    root: string,
+    query: string,
+    replacement: string,
+    isRegex: boolean,
+    caseSensitive: boolean,
+    wholeWord: boolean
+  ) =>
+    invoke<{ filesChanged: string[]; totalReplacements: number }>("replace_all", {
+      root,
+      query,
+      replacement,
+      isRegex,
+      caseSensitive,
+      wholeWord,
+    }),
+
   // git
   gitIsRepo: (root: string) => invoke<boolean>("git_is_repo", { root }),
   gitStatus: (root: string) => invoke<GitStatus>("git_status", { root }),

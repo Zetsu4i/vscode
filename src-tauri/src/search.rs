@@ -49,22 +49,7 @@ pub async fn search_workspace(
         return Err("Empty search query".to_string());
     }
 
-    let pattern = if is_regex {
-        query.clone()
-    } else {
-        regex::escape(&query)
-    };
-    let pattern = if whole_word {
-        format!(r"\b(?:{})\b", pattern)
-    } else {
-        pattern
-    };
-    let pattern = if case_sensitive {
-        pattern
-    } else {
-        format!("(?i){}", pattern)
-    };
-    let re = Regex::new(&pattern).map_err(|e| format!("Invalid pattern: {}", e))?;
+    let re = build_regex(&query, is_regex, case_sensitive, whole_word)?;
 
     tauri::async_runtime::spawn(async move {
         let re = Arc::new(re);
@@ -162,6 +147,111 @@ pub async fn search_workspace(
     });
 
     Ok(())
+}
+
+/// Shared flag translation for search and replace: literal vs regex,
+/// whole-word boundaries, case-insensitive prefix.
+fn build_regex(query: &str, is_regex: bool, case_sensitive: bool, whole_word: bool) -> Result<Regex, String> {
+    let pattern = if is_regex {
+        query.to_string()
+    } else {
+        regex::escape(query)
+    };
+    let pattern = if whole_word {
+        format!(r"\b(?:{})\b", pattern)
+    } else {
+        pattern
+    };
+    let pattern = if case_sensitive {
+        pattern
+    } else {
+        format!("(?i){}", pattern)
+    };
+    Regex::new(&pattern).map_err(|e| format!("Invalid pattern: {}", e))
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct ReplaceResult {
+    pub files_changed: Vec<String>,
+    pub total_replacements: usize,
+}
+
+/// Replace every match of the query across the workspace (same walker and
+/// flags as search_workspace). Files are written back only when their content
+/// actually changed; binary files and non-UTF-8 files are skipped untouched.
+/// The replacement supports `$1`-style capture group references.
+#[tauri::command]
+pub async fn replace_all(
+    root: String,
+    query: String,
+    replacement: String,
+    is_regex: bool,
+    case_sensitive: bool,
+    whole_word: bool,
+) -> Result<ReplaceResult, String> {
+    if query.is_empty() {
+        return Err("Empty search query".to_string());
+    }
+    let re = build_regex(&query, is_regex, case_sensitive, whole_word)?;
+
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        let mut files_changed: Vec<String> = Vec::new();
+        let mut total: usize = 0;
+
+        let walker = WalkBuilder::new(&root)
+            .hidden(true)
+            .git_ignore(true)
+            .git_global(true)
+            .git_exclude(true)
+            .build();
+
+        for entry in walker.flatten() {
+            let p = entry.path();
+            if !entry.file_type().map(|t| t.is_file()).unwrap_or(false) {
+                continue;
+            }
+            if p.components()
+                .any(|c| SKIP_DIRS.contains(&c.as_os_str().to_string_lossy().as_ref()))
+            {
+                continue;
+            }
+            let meta = match fs::metadata(p) {
+                Ok(m) => m,
+                Err(_) => continue,
+            };
+            if meta.len() > MAX_FILE_BYTES {
+                continue;
+            }
+            // Only touch valid UTF-8 text so we never corrupt binaries.
+            let text = match fs::read(p).and_then(|b| String::from_utf8(b).map_err(|_| ())) {
+                Ok(t) => t,
+                Err(_) => continue,
+            };
+
+            let count = re.find_iter(&text).count();
+            if count == 0 {
+                continue;
+            }
+            let replaced = re.replace_all(&text, replacement.as_str()).to_string();
+            if replaced == text {
+                continue;
+            }
+            if fs::write(p, replaced).is_ok() {
+                total += count;
+                files_changed.push(p.to_string_lossy().to_string());
+            }
+        }
+
+        ReplaceResult {
+            files_changed,
+            total_replacements: total,
+        }
+    })
+    .await
+    .map_err(|e| format!("replace failed: {}", e))?;
+
+    Ok(result)
 }
 
 /// Compute the workspace-relative display path (helper mirrored on the frontend too).

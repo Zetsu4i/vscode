@@ -71,6 +71,8 @@ interface EditorState {
   markSaved: (path: string) => void;
   save: (path?: string) => Promise<boolean>;
   saveAll: () => Promise<void>;
+  /** Re-read the given files from disk into open buffers (skips dirty ones). */
+  reloadBuffers: (paths: string[]) => Promise<void>;
   handleRename: (oldPath: string, newPath: string) => void;
   handleDelete: (path: string) => void;
   setProblems: (p: Problem[]) => void;
@@ -326,6 +328,31 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     const dirty = Object.entries(get().buffers).filter(([, b]) => b.dirty);
     for (const [path] of dirty) {
       await get().save(path);
+    }
+  },
+
+  reloadBuffers: async (paths) => {
+    const updates: Record<string, FileBuf> = {};
+    for (const path of paths) {
+      const buf = get().buffers[path];
+      if (!buf || buf.dirty) continue; // never clobber in-progress edits
+      try {
+        const fc = await ipc.readFile(path);
+        updates[path] = {
+          ...buf,
+          text: fc.content,
+          savedText: fc.content,
+          dirty: false,
+          binary: fc.isBinary,
+          truncated: fc.truncated,
+          version: buf.version + 1,
+        };
+      } catch {
+        /* file may have been deleted; the watcher will handle that */
+      }
+    }
+    if (Object.keys(updates).length > 0) {
+      set((s) => ({ buffers: { ...s.buffers, ...updates } }));
     }
   },
 
