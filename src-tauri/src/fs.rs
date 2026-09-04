@@ -108,6 +108,41 @@ pub fn read_file(path: String) -> Result<FileContent, String> {
     })
 }
 
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct BytesContent {
+    pub data_b64: String,
+    pub size: u64,
+    pub truncated: bool,
+}
+
+const MAX_HEX_BYTES: u64 = 256 * 1024;
+
+/// Raw byte read for the hex viewer: returns up to `limit` bytes (default
+/// 256 KB) base64-encoded, plus the full file size so the UI can indicate
+/// truncation. Never loads more than the cap into memory.
+#[tauri::command]
+pub fn read_file_bytes(path: String, limit: Option<u64>) -> Result<BytesContent, String> {
+    let p = Path::new(&path);
+    let meta = fs::metadata(p).map_err(|e| format!("Cannot access '{}': {}", path, e))?;
+    if meta.is_dir() {
+        return Err(format!("'{}' is a directory", path));
+    }
+    let size = meta.len();
+    let cap = limit.unwrap_or(MAX_HEX_BYTES).min(MAX_HEX_BYTES).min(size);
+    let mut file = fs::File::open(p).map_err(|e| format!("Cannot open '{}': {}", path, e))?;
+    let mut buf: Vec<u8> = vec![0u8; cap as usize];
+    file.read_exact(&mut buf)
+        .map_err(|e| format!("Cannot read '{}': {}", path, e))?;
+
+    use base64::Engine;
+    Ok(BytesContent {
+        data_b64: base64::engine::general_purpose::STANDARD.encode(&buf),
+        size,
+        truncated: size > cap,
+    })
+}
+
 #[tauri::command]
 pub fn write_file(path: String, content: String) -> Result<(), String> {
     let p = Path::new(&path);

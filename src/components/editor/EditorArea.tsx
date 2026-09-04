@@ -5,6 +5,7 @@ import MonacoPane from "./MonacoPane";
 import DiffPane from "./DiffPane";
 import Welcome from "./Welcome";
 import Breadcrumbs from "./Breadcrumbs";
+import HexView from "./HexView";
 
 function Splitter({
   splitId,
@@ -83,6 +84,7 @@ function GroupPane({ groupId }: { groupId: number }) {
   if (!group) return null;
 
   const active = group.tabs.find((t) => t.key === group.activeKey);
+  const activeBuf = active?.kind === "file" ? useEditorStore.getState().buffers[active.path] : null;
 
   const allowDrop = (e: React.DragEvent) => {
     if (e.dataTransfer.types.includes("application/vstauri-tab")) e.preventDefault();
@@ -120,6 +122,13 @@ function GroupPane({ groupId }: { groupId: number }) {
         {active?.kind === "file" && (
           <>
             <Breadcrumbs path={active.path} />
+            {activeBuf?.truncated && !activeBuf?.binary && (
+              <div className="truncated-banner">
+                <i className="codicon codicon-warning" />
+                Large file — showing the first 5 MB. Binary or oversized files
+                open in the hex viewer.
+              </div>
+            )}
             <div className="editor-pane">
               <MonacoPane key={active.key} path={active.path} />
             </div>

@@ -103,6 +103,11 @@ export const ipc = {
   listAllFiles: (root: string, limit?: number) =>
     invoke<string[]>("list_all_files", { root, limit: limit ?? null }),
   fileExists: (path: string) => invoke<boolean>("file_exists", { path }),
+  readFileBytes: (path: string, limit?: number) =>
+    invoke<{ dataB64: string; size: number; truncated: boolean }>("read_file_bytes", {
+      path,
+      limit: limit ?? null,
+    }),
 
   // watcher
   watchFolder: (root: string) => invoke<void>("watch_folder", { root }),

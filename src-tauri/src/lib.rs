@@ -29,6 +29,7 @@ pub fn run() {
             // filesystem
             fs::list_dir,
             fs::read_file,
+            fs::read_file_bytes,
             fs::write_file,
             fs::create_file,
             fs::create_dir,

@@ -6,6 +6,7 @@ import { useUiStore } from "../../state/uiStore";
 import { useWorkspaceStore } from "../../state/workspaceStore";
 import { useSettingsStore } from "../../state/settingsStore";
 import { languageForPath } from "../../util/paths";
+import HexView from "./HexView";
 
 // ---- module-level singletons (shared across editor groups) -----------------
 
@@ -429,13 +430,7 @@ export default function MonacoPane({ path }: { path: string }) {
   const buf = useEditorStore((s) => s.buffers[path]);
 
   if (buf?.binary) {
-    return (
-      <div className="binary-view">
-        <i className="codicon codicon-file-binary" />
-        <p>The file is not displayed in the text editor because it is binary.</p>
-        <p className="muted">{path}</p>
-      </div>
-    );
+    return <HexView path={path} />;
   }
 
   return <div ref={containerRef} className="monaco-container" />;
