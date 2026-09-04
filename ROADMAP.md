@@ -4,7 +4,7 @@
 >
 > **Method.** Copy-Then-Delete (see `AGENTS.md` §M-1): original code stays authoritative until its Rust/Tauri replacement passes the parity checklist; then the original is deleted stepwise in dedicated cutover commits. Every phase leaves the Electron build working until Phase 6 says otherwise.
 >
-> **Last updated:** 2026-09-04 · **Current phase:** 0 — Foundations · Branch: `arena/01a06ddd-vscode`
+> **Last updated:** 2026-09-04 · **Current phase:** 1 — Shell parity (Phase 0 done except parked CI activation + GUI smoke test) · Branch: `arena/01a06ddd-vscode`
 
 Status legend: ⬜ not started · 🟨 in progress · ✅ done · ⏸ blocked
 
@@ -17,21 +17,22 @@ Set up scaffolding, tooling, and rules. Zero behavior change to the Electron app
 - ✅ Migration law: `AGENTS.md` (Copy-Then-Delete lifecycle, commit rules, secrets policy)
 - ✅ This roadmap: phase gates, deletion ledger, known gaps
 - ✅ Target architecture + initial ADRs (`docs/tauri/`)
-- ✅ Tauri 2 scaffold (`src-tauri/`) with placeholder shell window (`npm run tauri:dev` wiring included)
+- ✅ Tauri 2 scaffold (`src-tauri/`) with shell window (`npm run tauri:dev` wiring included)
 - ⏸ CI: `cargo fmt/clippy/check` on Linux/Windows/macOS — workflow file ready at `docs/tauri/ci/tauri-workflow.yml`; **blocked**: needs a maintainer to copy it to `.github/workflows/tauri.yml` (sandbox GitHub connection lacks the `workflows` permission)
-- ⬜ Verify `npm ci` + baseline Electron compile in a long-running session (huge install)
-- ⬜ Identify + script the web workbench bundle task (`build/gulpfile.vscode.web.ts`) → output to `dist-tauri/`
+- ✅ `npm ci` verified in-sandbox (see `docs/tauri/SANDBOX.md` for the offline adaptations; full script-enabled install works on normal dev machines)
+- ✅ Web workbench bundle scripted + verified: `npm run tauri:web` runs the upstream `vscode-web-ci` gulp task (esbuild straight from `src/`, 12 bundles) and packages a servable site into `out/vscode-web/`
 - ✅ Parity checklist template ready for use (`docs/tauri/parity/README.md`)
 
 **Exit criteria:** CI green on all three OSes; on any dev machine with Rust installed, `npm run tauri:dev` opens a native window with the placeholder page; Electron build untouched and green.
 
 ---
 
-## Phase 1 — Shell parity: Tauri runs the real workbench ⬜
+## Phase 1 — Shell parity: Tauri runs the real workbench 🟨
 
 Replace the Electron window with a Tauri window that loads the genuine VS Code web workbench build. The UI must be indistinguishable from Code.
 
-- [ ] Bundle the web workbench (gulp task from `build/gulpfile.vscode.web.ts`) → serve via Tauri custom protocol; workbench boots like vscode.dev
+- ✅ Bundle the web workbench (upstream `vscode-web-ci` gulp task) → served from `out/vscode-web/` via Tauri static protocol; bootstrap pre-rendered like upstream's `webClientServer.ts` + browser-shell loader bundled (see `scripts/tauri/build-web.mjs`)
+- [ ] **Verify on a machine with Rust + webview deps:** `npm run tauri:dev` opens a real workbench (empty workspace); screenshot-compare vs Electron
 - [ ] Window lifecycle parity: multi-window, window titles (folder/file), zoom, fullscreen, focus/restore — Rust port of the behaviors in `src/vs/platform/windows/electron-main/*`
 - [ ] Native menu bar (Tauri menu API mirroring the upstream menu model), native dialogs, clipboard, `openExternal`
 - [ ] Boot performance baseline recorded vs Electron (`docs/tauri/parity/shell.md`)
@@ -125,6 +126,9 @@ Copy-Then-Delete states — **A** original → **B** dual → **C** cutover → 
 | No desktop extension host | 4 |
 | WebKitGTK / WKWebView rendering & IME audit not yet run | 5 |
 | Rust compile checks can't run in this sandbox (no crates.io egress) — CI covers them | 0 |
+| 3 marketplace built-ins (js-debug, js-debug-companion, js-profile-table) are **disabled in sandbox builds only** (`~/.vscode-oss-dev/extensions/control.json`) because the release-assets CDN is blocked here; normal machines build them from GitHub releases automatically | 1 |
+| Sandbox web bundle is unminified (`vscode-web-ci`); releases use `vscode-web-min` | 5 |
+| Dynamic workbench bootstrap (per-request nonce, query-driven folder open) is pre-rendered static for now; the Rust custom protocol replaces this when window/query parity lands | 1–2 |
 
 ---
 
@@ -141,10 +145,10 @@ Copy-Then-Delete states — **A** original → **B** dual → **C** cutover → 
 
 ## Next up
 
-1. Verify `npm ci` + baseline Electron compile in a long-running session
-2. Script the web workbench bundle into `dist-tauri/` (Phase 1 prep)
-3. Wire `@tauri-apps/cli` + `npm run tauri:dev`
+1. Maintainer: activate CI (`docs/tauri/ci/tauri-workflow.yml` → `.github/workflows/tauri.yml`)
+2. On a Rust machine: `npm run tauri:web && npm run tauri:dev` → verify the real workbench boots; capture screenshots into `docs/tauri/parity/shell.md`
+3. Begin Phase 2 seam design: `files` service (Rust `files.rs` + TS adapter at the workbench factory seam)
 
 ---
 
-*Rules of engagement live in [`AGENTS.md`](AGENTS.md). Architecture decisions live in [`docs/tauri/`](docs/tauri/ARCHITECTURE.md). Update this file in the same commit as the work it describes.*
+*Sandbox environment notes live in [`docs/tauri/SANDBOX.md`](docs/tauri/SANDBOX.md). Rules of engagement live in [`AGENTS.md`](AGENTS.md). Architecture decisions live in [`docs/tauri/`](docs/tauri/ARCHITECTURE.md). Update this file in the same commit as the work it describes.*

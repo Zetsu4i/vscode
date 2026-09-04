@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "identifier": "dev.zetsu4i.codetauri",
   "build": {
-    "frontendDist": "../dist-tauri"
+    "frontendDist": "../out/vscode-web"
   },
   "app": {
     "withGlobalTauri": true,
@@ -12,6 +12,7 @@
       {
         "label": "main",
         "title": "Code - Tauri",
+        "url": "out/vs/code/browser/workbench/workbench.html",
         "width": 1280,
         "height": 800,
         "minWidth": 700,
