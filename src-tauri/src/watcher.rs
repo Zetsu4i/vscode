@@ -1,5 +1,5 @@
 use notify::{RecursiveMode, Watcher};
-use notify_debouncer_full::{new_debouncer, Debouncer, FileIdMap};
+use notify_debouncer_full::{new_debouncer, DebounceEventResult, Debouncer, FileIdMap};
 use std::path::Path;
 use std::sync::Mutex;
 use std::time::Duration;
@@ -26,18 +26,22 @@ pub fn watch_folder(
     root: String,
 ) -> Result<(), String> {
     let app_handle = app.clone();
-    let mut debouncer = new_debouncer(Duration::from_millis(300), None, move |result| {
-        if let Ok(events) = result {
-            let paths: Vec<String> = events
-                .iter()
-                .flat_map(|e| e.paths.iter())
-                .map(|p| p.to_string_lossy().to_string())
-                .collect();
-            if !paths.is_empty() {
-                let _ = app_handle.emit("fs-changed", serde_json::json!({ "paths": paths }));
+    let mut debouncer = new_debouncer(
+        Duration::from_millis(300),
+        None,
+        move |result: DebounceEventResult| {
+            if let Ok(events) = result {
+                let paths: Vec<String> = events
+                    .iter()
+                    .flat_map(|e| e.event.paths.iter())
+                    .map(|p| p.to_string_lossy().to_string())
+                    .collect();
+                if !paths.is_empty() {
+                    let _ = app_handle.emit("fs-changed", serde_json::json!({ "paths": paths }));
+                }
             }
-        }
-    })
+        },
+    )
     .map_err(|e| e.to_string())?;
 
     debouncer

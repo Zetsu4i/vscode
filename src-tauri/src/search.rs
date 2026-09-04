@@ -151,7 +151,12 @@ pub async fn search_workspace(
 
 /// Shared flag translation for search and replace: literal vs regex,
 /// whole-word boundaries, case-insensitive prefix.
-fn build_regex(query: &str, is_regex: bool, case_sensitive: bool, whole_word: bool) -> Result<Regex, String> {
+fn build_regex(
+    query: &str,
+    is_regex: bool,
+    case_sensitive: bool,
+    whole_word: bool,
+) -> Result<Regex, String> {
     let pattern = if is_regex {
         query.to_string()
     } else {
@@ -224,9 +229,9 @@ pub async fn replace_all(
                 continue;
             }
             // Only touch valid UTF-8 text so we never corrupt binaries.
-            let text = match fs::read(p).and_then(|b| String::from_utf8(b).map_err(|_| ())) {
-                Ok(t) => t,
-                Err(_) => continue,
+            let text = match fs::read(p).ok().and_then(|b| String::from_utf8(b).ok()) {
+                Some(t) => t,
+                None => continue,
             };
 
             let count = re.find_iter(&text).count();
