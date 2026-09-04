@@ -57,6 +57,11 @@ export default function TitleBar() {
         },
         { label: "", separator: true },
         {
+          label: "Preferences",
+          action: () => useEditorStore.getState().openSpecial("settings"),
+        },
+        { label: "", separator: true },
+        {
           label: "Close Folder",
           action: () => useWorkspaceStore.getState().closeFolder(),
         },

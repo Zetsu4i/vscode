@@ -68,9 +68,13 @@ export default function TabBar({ groupId }: { groupId: number }) {
         const iconClass =
           tab.kind === "diff"
             ? "codicon-diff-multiple"
-            : lang === "json"
-              ? "codicon-json"
-              : "codicon-file-code";
+            : tab.kind === "settings"
+              ? "codicon-settings-gear"
+              : tab.kind === "keybindings"
+                ? "codicon-keyboard"
+                : lang === "json"
+                  ? "codicon-json"
+                  : "codicon-file-code";
         return (
           <div
             key={tab.key}

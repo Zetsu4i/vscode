@@ -3,6 +3,7 @@ import { ipc } from "../ipc";
 import {
   coerce,
   getAt,
+  removeAt,
   setAt,
   SETTINGS,
   SETTINGS_BY_ID,
@@ -48,6 +49,8 @@ interface SettingsState extends SettingsData {
    * settings fall back to user scope when no workspace folder is open.
    */
   update: (id: string, value: unknown, scope?: "user" | "workspace") => Promise<void>;
+  /** Remove an override from the scope document it lives in (falls back to user). */
+  reset: (id: string) => Promise<void>;
 
   // convenience actions (palette / keybindings / status bar)
   toggleBreadcrumbs: () => void;
@@ -81,7 +84,7 @@ const DEFAULTS: SettingsData = {
 };
 
 /** schema id → store field */
-const FIELD_OF: Record<string, keyof SettingsData> = {
+export const FIELD_OF: Record<string, keyof SettingsData> = {
   "workbench.colorTheme": "colorTheme",
   "workbench.iconTheme": "iconTheme",
   "breadcrumbs.enabled": "breadcrumbs",
@@ -167,6 +170,21 @@ export const useSettingsStore = create<SettingsState>((set, get) => {
     }
   };
 
+  const resetScoped = async (id: string): Promise<void> => {
+    // remove from the scope document that actually overrides it
+    let target: "user" | "workspace" | null = null;
+    if (getAt(get().workspaceValues, id) !== undefined) target = "workspace";
+    else if (getAt(get().userValues, id) !== undefined) target = "user";
+    if (!target) return;
+    set((s) =>
+      target === "workspace"
+        ? { workspaceValues: removeAt(s.workspaceValues, id) }
+        : { userValues: removeAt(s.userValues, id) }
+    );
+    persist(target);
+    apply();
+  };
+
   const updateScoped = async (
     id: string,
     value: unknown,
@@ -249,6 +267,10 @@ export const useSettingsStore = create<SettingsState>((set, get) => {
 
     update: async (id, value, scope = "user") => {
       await updateScoped(id, value, scope);
+    },
+
+    reset: async (id) => {
+      await resetScoped(id);
     },
 
     toggleBreadcrumbs: () => void updateScoped("breadcrumbs.enabled", !get().breadcrumbs, "user"),

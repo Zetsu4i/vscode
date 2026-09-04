@@ -241,6 +241,19 @@ export const commands: Command[] = [
     run: () => useWorkspaceStore.getState() && useUiStore.getState().setView("git"),
   },
   {
+    id: "workbench.action.openSettings",
+    title: "Preferences: Open Settings",
+    category: "Preferences",
+    keybinding: "Ctrl+,",
+    run: () => useEditorStore.getState().openSpecial("settings"),
+  },
+  {
+    id: "workbench.action.openKeybindings",
+    title: "Preferences: Open Keyboard Shortcuts",
+    category: "Preferences",
+    run: () => useEditorStore.getState().openSpecial("keybindings"),
+  },
+  {
     id: "workbench.action.toggleBreadcrumbs",
     title: "Toggle Breadcrumbs",
     category: "View",

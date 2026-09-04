@@ -127,6 +127,10 @@ export function useKeybindings(): void {
           e.preventDefault();
           runCommand("editor.action.fontZoomOut");
           break;
+        case ",":
+          e.preventDefault();
+          runCommand("workbench.action.openSettings");
+          break;
         default:
           break;
       }

@@ -205,6 +205,23 @@ export function setAt(
   return walk(obj, 0);
 }
 
+/** Returns a new object with `path` deleted (structural sharing). */
+export function removeAt(obj: Record<string, unknown>, path: string): Record<string, unknown> {
+  const segs = path.split(".");
+  const walk = (node: Record<string, unknown>, i: number): Record<string, unknown> => {
+    if (i === segs.length - 1) {
+      if (!(segs[i] in node)) return node;
+      const child = { ...node };
+      delete child[segs[i]];
+      return child;
+    }
+    const next = node[segs[i]];
+    if (next === null || typeof next !== "object" || Array.isArray(next)) return node;
+    return { ...node, [segs[i]]: walk(next as Record<string, unknown>, i + 1) };
+  };
+  return walk(obj, 0);
+}
+
 /** Coerce + validate a raw value from JSON against a setting definition. */
 export function coerce(def: SettingDef, raw: unknown): { ok: boolean; value: unknown } {
   switch (def.type) {

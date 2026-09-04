@@ -3,12 +3,11 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useKeybindings } from "./hooks/useKeybindings";
 import { useUiStore } from "./state/uiStore";
 import { useWorkspaceStore } from "./state/workspaceStore";
-import { useEditorStore, selectActiveTab } from "./state/editorStore";
+import { useEditorStore, selectActiveTab, tabLabel } from "./state/editorStore";
 import { useTerminalStore } from "./state/terminalStore";
 import { useSearchStore } from "./state/searchStore";
 import { useSettingsStore } from "./state/settingsStore";
 import { onFsChanged, onSearchProgress, onSearchDone } from "./ipc";
-import { baseName } from "./util/paths";
 
 import TitleBar from "./components/titlebar/TitleBar";
 import ActivityBar from "./components/activitybar/ActivityBar";
@@ -54,7 +53,7 @@ export default function App() {
       const rootName = useWorkspaceStore.getState().rootName;
       const active = selectActiveTab(state);
       const parts: string[] = [];
-      if (active) parts.push(baseName(active.path));
+      if (active) parts.push(tabLabel(active));
       if (rootName) parts.push(rootName);
       parts.push("VSTauri");
       void getCurrentWindow().setTitle(parts.join(" - "));

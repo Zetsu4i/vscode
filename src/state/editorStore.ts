@@ -2,10 +2,11 @@ import { create } from "zustand";
 import { ipc } from "../ipc";
 import { baseName } from "../util/paths";
 
-export type TabKind = "file" | "diff";
+export type TabKind = "file" | "diff" | "settings" | "keybindings";
 
 export interface OpenTab {
-  key: string; // path for files, "diff:<path>" for diffs
+  /** path for files, "diff:<path>" for diffs, "settings"/"keybindings" for workbench tabs */
+  key: string;
   kind: TabKind;
   path: string;
 }
@@ -64,6 +65,8 @@ interface EditorState {
 
   openFile: (path: string) => Promise<void>;
   openDiff: (path: string) => Promise<void>;
+  /** Open a workbench UI tab (Settings, Keyboard Shortcuts) in the active group. */
+  openSpecial: (kind: "settings" | "keybindings") => void;
   closeTab: (key: string) => void;
   closeAll: () => void;
   setActive: (key: string) => void;
@@ -229,6 +232,26 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     } catch (e) {
       console.error("diff open failed", e);
     }
+  },
+
+  openSpecial: (kind) => {
+    const key = kind;
+    const s = get();
+    const owner = s.groups.find((g) => g.tabs.some((t) => t.key === key));
+    if (owner) {
+      set((st) => ({
+        activeGroupId: owner.id,
+        groups: st.groups.map((g) => (g.id === owner.id ? { ...g, activeKey: key } : g)),
+      }));
+      return;
+    }
+    set((st) => ({
+      groups: st.groups.map((g) =>
+        g.id === st.activeGroupId
+          ? { ...g, tabs: [...g.tabs, { key, kind: kind as TabKind, path: kind }], activeKey: key }
+          : g
+      ),
+    }));
   },
 
   closeTab: (key) => {
@@ -517,6 +540,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 }));
 
 export function tabLabel(tab: OpenTab): string {
+  if (tab.kind === "settings") return "Settings";
+  if (tab.kind === "keybindings") return "Keyboard Shortcuts";
   const name = baseName(tab.path);
   return tab.kind === "diff" ? `${name} (Working Tree)` : name;
 }
