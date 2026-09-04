@@ -2,6 +2,7 @@ import { useWorkspaceStore } from "../../state/workspaceStore";
 import { relativePath } from "../../util/paths";
 import { useSettingsStore } from "../../state/settingsStore";
 import { useUiStore } from "../../state/uiStore";
+import FileIcon from "../shared/FileIcon";
 
 /**
  * Path breadcrumbs above the editor: workspace-root-relative folder segments
@@ -51,14 +52,12 @@ export default function Breadcrumbs({ path }: { path: string }) {
                 if (!isFile) revealDir(dirRel);
               }}
             >
-              {isFile && <i className="codicon codicon-file crumb-icon" />}
-              {!isFile && (
-                <i
-                  className={`codicon ${
-                    isExpandedDir ? "codicon-folder-opened" : "codicon-folder"
-                  } crumb-icon`}
-                />
-              )}
+              <FileIcon
+                name={seg}
+                isDir={!isFile}
+                expanded={isExpandedDir}
+                className="crumb-icon"
+              />
               {seg}
             </span>
           </span>

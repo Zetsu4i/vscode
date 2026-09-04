@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useEditorStore, tabLabel, EditorGroup } from "../../state/editorStore";
 import { languageForPath } from "../../util/paths";
+import FileIcon from "../shared/FileIcon";
+import { baseName } from "../../util/paths";
 
 interface DragPayload {
   key: string;
@@ -72,9 +74,7 @@ export default function TabBar({ groupId }: { groupId: number }) {
               ? "codicon-settings-gear"
               : tab.kind === "keybindings"
                 ? "codicon-keyboard"
-                : lang === "json"
-                  ? "codicon-json"
-                  : "codicon-file-code";
+                : null;
         return (
           <div
             key={tab.key}
@@ -108,7 +108,11 @@ export default function TabBar({ groupId }: { groupId: number }) {
             onDrop={(e) => handleDrop(e, i)}
             title={tab.path}
           >
-            <i className={`codicon ${iconClass} tab-icon`} />
+            {iconClass ? (
+              <i className={`codicon ${iconClass} tab-icon`} />
+            ) : (
+              <FileIcon name={baseName(tab.path)} isDir={false} className="tab-icon" />
+            )}
             <span className="tab-label">{tabLabel(tab)}</span>
             {buf?.dirty && (
               <span className="tab-dirty" title="Unsaved changes" />

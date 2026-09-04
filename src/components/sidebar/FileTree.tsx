@@ -3,6 +3,7 @@ import { useWorkspaceStore } from "../../state/workspaceStore";
 import { useEditorStore, selectActiveKey } from "../../state/editorStore";
 import { joinPath } from "../../util/paths";
 import { MenuItem } from "../../state/uiStore";
+import FileIcon from "../shared/FileIcon";
 
 interface Props {
   entry: FileEntry;
@@ -42,15 +43,7 @@ export default function FileTree({ entry, depth, onEntryMenu }: Props) {
         ) : (
           <span className="tree-chevron-spacer" />
         )}
-        <i
-          className={`codicon ${
-            entry.isDir
-              ? expanded
-                ? "codicon-folder-opened"
-                : "codicon-folder"
-              : "codicon-file"
-          } tree-icon`}
-        />
+        <FileIcon name={entry.name} isDir={entry.isDir} expanded={expanded} className="tree-icon" />
         <span className="tree-name">
           {entry.name}
           {dirty && <span className="tree-dirty-dot" />}
