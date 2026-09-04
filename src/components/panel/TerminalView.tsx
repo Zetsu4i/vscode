@@ -4,7 +4,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { onPtyOutput, onPtyExit } from "../../ipc";
 import { useTerminalStore, Term } from "../../state/terminalStore";
 import { useUiStore } from "../../state/uiStore";
-import { XTERM_DARK_PLUS } from "../../theme/darkplus";
+import { getActiveTheme, onThemeChange } from "../../theme";
 
 function TerminalInstance({ term }: { term: Term }) {
   const hostRef = useRef<HTMLDivElement>(null);
@@ -16,7 +16,7 @@ function TerminalInstance({ term }: { term: Term }) {
     if (!host) return;
 
     const t = new Terminal({
-      theme: XTERM_DARK_PLUS,
+      theme: getActiveTheme().xterm,
       fontSize: 14,
       fontFamily: 'Consolas, "Courier New", "Droid Sans Mono", monospace',
       cursorBlink: true,
@@ -54,6 +54,11 @@ function TerminalInstance({ term }: { term: Term }) {
       void import("../../ipc").then(({ ipc }) => ipc.resizePty(term.id, rows, cols));
     });
 
+    // Follow workbench theme changes live.
+    const unTheme = onThemeChange((th) => {
+      t.options.theme = th.xterm;
+    });
+
     const ro = new ResizeObserver(() => {
       try {
         fit.fit();
@@ -64,6 +69,7 @@ function TerminalInstance({ term }: { term: Term }) {
     ro.observe(host);
 
     return () => {
+      unTheme();
       ro.disconnect();
       dataSub.dispose();
       resizeSub.dispose();

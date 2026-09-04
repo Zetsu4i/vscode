@@ -19,9 +19,15 @@ import StatusBar from "./components/statusbar/StatusBar";
 import QuickOpen from "./components/palette/QuickOpen";
 import ContextMenu from "./components/menus/ContextMenu";
 import { InputDialog, ConfirmDialog } from "./components/dialogs/Dialogs";
+import { initThemes } from "./theme";
 
 export default function App() {
   useKeybindings();
+
+  // Themes (built-ins + settings subscription) then settings, then workspace.
+  useEffect(() => {
+    initThemes();
+  }, []);
 
   // Restore settings, then last workspace + wire global backend events
   useEffect(() => {
