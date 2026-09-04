@@ -4,6 +4,7 @@
   "version": "0.1.0",
   "identifier": "dev.zetsu4i.codetauri",
   "build": {
+    "beforeBuildCommand": "npm run tauri:web",
     "frontendDist": "../out/vscode-web"
   },
   "app": {

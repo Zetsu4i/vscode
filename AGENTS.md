@@ -69,7 +69,7 @@ Additional rules:
 - Validation expected per commit:
   - TypeScript changes: upstream build/lint stays green (targeted `npm run compile` / gulp task).
   - Rust changes: `cargo fmt --check`, `cargo clippy -- -D warnings`, `cargo check` in `src-tauri/`.
-  - If the environment has no crates.io egress (true of the current sandbox), write `rust-check: deferred (no crates.io egress)` in the commit body. At most **one** consecutive batch of deferred Rust commits; the next environment with access (normally CI — `docs/tauri/ci/tauri-workflow.yml`, installed at `.github/workflows/tauri.yml`) must validate before more Rust work stacks on top.
+  - If the environment has no crates.io egress (true of the current sandbox), write `rust-check: deferred (no crates.io egress)` in the commit body. At most **one** consecutive batch of deferred Rust commits; the next environment with access (normally CI — `.github/workflows/tauri.yml`) must validate before more Rust work stacks on top.
 
 ## M-5. Porting style
 
@@ -98,5 +98,5 @@ Additional rules:
 ## M-8. Environment notes (current sandbox)
 
 - Node 22 + npm available; npm registry reachable.
-- **No Rust toolchain and no crates.io egress** in this sandbox: Rust compile checks run in CI (`docs/tauri/ci/tauri-workflow.yml` — a maintainer must copy it to `.github/workflows/tauri.yml`). Follow the deferral rule in M-4.
+- **No Rust toolchain and no crates.io egress** in this sandbox: Rust compile checks run in CI (`.github/workflows/tauri.yml` — `rust-check` job on 3 OSes, plus a Windows release-build job). Follow the deferral rule in M-4.
 - All work happens on the session branch `arena/01a06ddd-vscode`; push with `git push origin arena/01a06ddd-vscode`.

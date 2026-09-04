@@ -1,16 +1,26 @@
-# Tauri migration — Phase 0 (see ROADMAP.md).
-# NOTE: parked here because the sandbox's GitHub connection lacks the `workflows`
-# permission. A maintainer should copy this file to `.github/workflows/tauri.yml`
-# to activate it. It is the compile gate for Rust work (the dev sandbox has no
-# crates.io egress).
+# Tauri migration — Phase 0/1 (see ROADMAP.md).
+#
+# ACTIVATION NOTE FOR MAINTAINERS: the automation connection in the dev
+# sandbox cannot create or modify files under .github/workflows/. Copy THIS
+# file over `.github/workflows/tauri.yml` to activate (one-time per change;
+# the copy at .github/workflows/tauri.yml is the source of truth).
+#
+# Structure:
+#   rust-check    — fast compile gate (fmt/clippy/check) on Linux/Windows/macOS
+#   build-windows — full release build: web workbench + Tauri bundle + installer artifacts
 name: Tauri Shell Checks
 
 on:
   push:
-    branches: ['**']
-    paths: ['src-tauri/**', 'dist-tauri/**', '.github/workflows/tauri.yml']
+    branches: ['arena/01a06ddd-vscode', 'main']
+    paths: ['src-tauri/**', 'dist-tauri/**', 'scripts/tauri/**', '.github/workflows/tauri.yml']
   pull_request:
-    paths: ['src-tauri/**', 'dist-tauri/**', '.github/workflows/tauri.yml']
+    paths: ['src-tauri/**', 'dist-tauri/**', 'scripts/tauri/**', '.github/workflows/tauri.yml']
+  workflow_dispatch:
+
+concurrency:
+  group: tauri-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   rust-check:
@@ -46,3 +56,51 @@ jobs:
 
       - name: check
         run: cargo check --manifest-path src-tauri/Cargo.toml
+
+  build-windows:
+    needs: rust-check
+    runs-on: windows-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      # .nvmrc requires Node 24 (repo preinstall enforces the major version)
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      # Full install (with lifecycle scripts) — all sub-dirs (extensions, remote/web, ...)
+      # are handled by the repo postinstall. No `npx tsc --noEmit` here: this repo has no
+      # root tsconfig; typechecking happens inside the web bundle task (tsgo).
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      # `tauri build` runs `beforeBuildCommand` (npm run tauri:web) from tauri.conf.json,
+      # which bundles the real VS Code web workbench into out/vscode-web.
+      - name: Build Tauri app (with VS Code web workbench)
+        env:
+          NODE_OPTIONS: '--max-old-space-size=8192'
+          GOGC: 50
+        run: npx tauri build
+
+      - name: Upload Windows artifacts (NSIS)
+        uses: actions/upload-artifact@v4
+        with:
+          name: vstauri-windows-nsis
+          path: src-tauri/target/release/bundle/nsis/*.exe
+          if-no-files-found: warn
+
+      - name: Upload Windows artifacts (MSI)
+        uses: actions/upload-artifact@v4
+        with:
+          name: vstauri-windows-msi
+          path: src-tauri/target/release/bundle/msi/*.msi
+          if-no-files-found: warn

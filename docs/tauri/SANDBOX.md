@@ -35,7 +35,7 @@ Outputs: `out-vscode-web/` (bundle, gitignored) → packaged site `../vscode-web
 
 ## Rust work in the sandbox
 
-No cargo/crates.io. Rules: `AGENTS.md` §M-4 — write `rust-check: deferred (no crates.io egress)` in the commit body (max one consecutive batch) and let CI (`.github/workflows/tauri.yml` — see `docs/tauri/ci/`) validate. The Rust shell (`src-tauri/`) is minimal until Phase 1 Rust work begins.
+No cargo/crates.io. Rules: `AGENTS.md` §M-4 — write `rust-check: deferred (no crates.io egress)` in the commit body (max one consecutive batch) and let CI (`.github/workflows/tauri.yml`) validate. The Rust shell (`src-tauri/`) is minimal until Phase 1 Rust work begins.
 
 ## What normal machines don't need
 
