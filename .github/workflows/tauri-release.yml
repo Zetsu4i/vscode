@@ -1,0 +1,118 @@
+name: Tauri Release Build
+
+# Creates a GitHub Release after a successful Tauri build.
+# Windows builds use NSIS only.
+#
+# The workflow is intentionally guarded: until src-tauri/tauri.conf.json exists
+# (Phase 1 of ROADMAP.md), the build job is skipped so pushes on the migration
+# branch do not turn red. Once the Rust shell is added, runs here will produce
+# and publish a release.
+
+on:
+  push:
+    branches:
+      - 'arena/01a06e77-vscode'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: tauri-release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  detect:
+    name: Detect Tauri config
+    runs-on: ubuntu-latest
+    outputs:
+      tauri_exists: ${{ steps.detect.outputs.tauri_exists }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check for Tauri scaffold
+        id: detect
+        shell: bash
+        run: |
+          if [ -f src-tauri/tauri.conf.json ]; then
+            echo "tauri_exists=true" >> "$GITHUB_OUTPUT"
+            echo "Tauri config detected: src-tauri/tauri.conf.json"
+          else
+            echo "tauri_exists=false" >> "$GITHUB_OUTPUT"
+            echo "No Tauri config yet. The build job will be skipped until Phase 1 of ROADMAP.md adds src-tauri/tauri.conf.json."
+          fi
+
+  build-windows:
+    name: Build Windows (NSIS)
+    needs: detect
+    if: needs.detect.outputs.tauri_exists == 'true'
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: 'src-tauri -> target'
+
+      - name: Install Tauri CLI
+        run: npm install -g @tauri-apps/cli
+
+      # Phase 1 must adjust the frontend-build step when the Tauri shell loads
+      # the existing VS Code workbench assets. Kept minimal so the workflow is
+      # a stable starting point rather than a broken guess.
+      - name: Build Tauri app (NSIS only)
+        run: npx tauri build --bundles nsis
+
+      - name: Upload Windows NSIS artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-nsis
+          path: src-tauri/target/release/bundle/nsis/*.exe
+          if-no-files-found: error
+
+  release:
+    name: Create GitHub Release
+    needs: build-windows
+    if: always() && needs.build-windows.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download NSIS artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-nsis
+          path: artifacts
+
+      - name: Create release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            TAG="${GITHUB_REF_NAME}"
+          else
+            TAG="tauri-${GITHUB_SHA::12}"
+          fi
+
+          echo "Creating/updating release for tag: ${TAG}"
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" artifacts/* --clobber
+          else
+            gh release create "$TAG" artifacts/* \
+              --target "${GITHUB_REF}" \
+              --title "Tauri build ${TAG}" \
+              --notes "Automatic Tauri release from ${GITHUB_REPOSITORY} (${GITHUB_SHA})."
+          fi
