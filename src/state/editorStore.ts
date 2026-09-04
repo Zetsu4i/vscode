@@ -52,6 +52,13 @@ export interface Problem {
   source?: string;
 }
 
+/** Serializable workbench state for session restore (group ids are indices). */
+export interface SessionSnapshot {
+  groups: { tabs: string[]; active: string | null }[];
+  activeGroupIndex: number;
+  layout: LayoutNode;
+}
+
 interface EditorState {
   groups: EditorGroup[];
   activeGroupId: number;
@@ -83,6 +90,10 @@ interface EditorState {
   focusGroup: (groupId: number) => void;
   splitGroup: (dir: "right" | "down") => void;
   closeGroup: (groupId: number) => void;
+  /** Restore a persisted session (replaces all groups/layout/buffers). */
+  restoreSession: (sess: SessionSnapshot) => Promise<void>;
+  /** Reset to a single empty group (used on folder close/switch). */
+  resetForSession: () => void;
   reorderTab: (groupId: number, from: number, to: number) => void;
   moveTabToGroup: (key: string, fromGroupId: number, toGroupId: number, index?: number) => void;
   resizeSplit: (splitId: number, index: number, deltaPx: number, containerPx: number) => void;
@@ -535,6 +546,75 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         return { ...node, sizes };
       });
       return { layout };
+    });
+  },
+
+  resetForSession: () =>
+    set(() => ({
+      groups: [{ id: 0, tabs: [], activeKey: null }],
+      activeGroupId: 0,
+      layout: { kind: "leaf", groupId: 0 },
+      nextGroupId: 1,
+      nextSplitId: 1,
+      buffers: {},
+      problems: [],
+      diffBase: {},
+    })),
+
+  restoreSession: async (sess) => {
+    if (!Array.isArray(sess.groups) || sess.groups.length === 0) return;
+    // Load every referenced file once, in parallel; drop missing ones.
+    const paths = [...new Set(sess.groups.flatMap((g) => g.tabs))].filter(
+      (p) => typeof p === "string"
+    );
+    const buffers: Record<string, FileBuf> = {};
+    await Promise.all(
+      paths.map(async (p) => {
+        try {
+          const fc = await ipc.readFile(p);
+          buffers[p] = {
+            text: fc.content,
+            savedText: fc.content,
+            dirty: false,
+            binary: fc.isBinary,
+            truncated: fc.truncated,
+            version: 1,
+          };
+        } catch {
+          /* file vanished since last session */
+        }
+      })
+    );
+
+    let maxSplitId = 0;
+    const scan = (n: LayoutNode): void => {
+      if (n.kind === "split") {
+        maxSplitId = Math.max(maxSplitId, n.id);
+        n.children.forEach(scan);
+      }
+    };
+    scan(sess.layout);
+
+    const groups: EditorGroup[] = sess.groups.map((g, i) => {
+      const tabs = g.tabs.filter((p) => buffers[p]);
+      const activeKey = g.active && buffers[g.active] ? g.active : tabs[tabs.length - 1] ?? null;
+      return {
+        id: i,
+        tabs: tabs.map((p) => ({ key: p, kind: "file" as TabKind, path: p })),
+        activeKey,
+      };
+    });
+    const activeGroupIndex = Math.min(
+      Math.max(0, sess.activeGroupIndex ?? 0),
+      groups.length - 1
+    );
+    set({
+      groups,
+      layout: sess.layout,
+      activeGroupId: groups[activeGroupIndex].id,
+      nextGroupId: groups.length,
+      nextSplitId: maxSplitId + 1,
+      buffers,
     });
   },
 }));

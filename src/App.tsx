@@ -20,6 +20,7 @@ import ContextMenu from "./components/menus/ContextMenu";
 import { InputDialog, ConfirmDialog } from "./components/dialogs/Dialogs";
 import { initThemes } from "./theme";
 import { initIconThemes } from "./theme/icons";
+import { startSessionTracking } from "./session/service";
 
 export default function App() {
   useKeybindings();
@@ -28,6 +29,7 @@ export default function App() {
   useEffect(() => {
     initThemes();
     initIconThemes();
+    startSessionTracking();
   }, []);
 
   // Restore settings, then last workspace + wire global backend events

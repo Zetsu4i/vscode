@@ -55,14 +55,21 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     // Pick up <root>/.vstauri/settings.json now that a folder is open.
     const { useSettingsStore } = await import("./settingsStore");
     await useSettingsStore.getState().reloadWorkspaceScope();
+    // Reopen the editors exactly as they were left (session restore).
+    const { restoreSessionForWorkspace } = await import("../session/service");
+    await restoreSessionForWorkspace();
   },
 
   closeFolder: () => {
     set({ root: null, rootName: "", tree: {}, expanded: {} });
     localStorage.removeItem(LS_KEY);
     useGitStore.getState().reset();
-    // Drop workspace-level setting overrides.
-    void import("./settingsStore").then((m) => m.useSettingsStore.getState().reloadWorkspaceScope());
+    // Clear the editor grid (session file is kept for next open).
+    // Drop workspace-level setting overrides and close all editors.
+    void import("./settingsStore").then((m) =>
+      m.useSettingsStore.getState().reloadWorkspaceScope()
+    );
+    void import("./editorStore").then((m) => m.useEditorStore.getState().resetForSession());
   },
 
   loadDir: async (dir, force = false) => {
