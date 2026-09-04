@@ -60,6 +60,7 @@ import { ITimerService } from '../services/timer/browser/timerService.js';
 import { WorkspaceTrustEnablementService, WorkspaceTrustManagementService } from '../services/workspaces/common/workspaceTrust.js';
 import { IWorkspaceTrustEnablementService, IWorkspaceTrustManagementService } from '../../platform/workspace/common/workspaceTrust.js';
 import { HTMLFileSystemProvider } from '../../platform/files/browser/htmlFileSystemProvider.js';
+import { isTauriRuntime, TauriFileSystemProvider } from '../services/tauri/browser/tauriFileSystemProvider.js'; // tauri: seam
 import { IOpenerService } from '../../platform/opener/common/opener.js';
 import { mixin, safeStringify } from '../../base/common/objects.js';
 import { IndexedDB } from '../../base/browser/indexedDB.js';
@@ -553,7 +554,12 @@ export class BrowserMain extends Disposable {
 		fileService.registerProvider(Schemas.vscodeUserData, userDataProvider);
 
 		// Local file access (if supported by browser)
-		if (WebFileSystemAccess.supported(mainWindow)) {
+		// tauri: seam — inside the Tauri shell, scheme `file` is backed by the
+		// Rust file service (src-tauri/src/services/files.rs); the plain web
+		// path below stays untouched.
+		if (isTauriRuntime()) {
+			fileService.registerProvider(Schemas.file, new TauriFileSystemProvider());
+		} else if (WebFileSystemAccess.supported(mainWindow)) {
 			fileService.registerProvider(Schemas.file, new HTMLFileSystemProvider(indexedDB, handlesStore, logService));
 		}
 

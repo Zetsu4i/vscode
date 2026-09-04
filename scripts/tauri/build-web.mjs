@@ -208,12 +208,23 @@ renderWorkbenchHtml(OUT_SITE);
 console.log('[tauri:web] bundling browser-shell loader (vs/code/browser/workbench/workbench)...');
 await bundleBrowserShellLoader(OUT_SITE);
 
-// Convenience root page for plain-browser previews (the Tauri window opens the
-// workbench html directly; this only helps humans poking at the folder).
-fs.writeFileSync(
-	path.join(OUT_SITE, 'index.html'),
-	'<!doctype html><meta charset="utf-8"><meta http-equiv="refresh" content="0;url=out/vs/code/browser/workbench/workbench.html"><title>Code - Tauri</title>'
-);
+// Restore the tracked placeholder page (see out/vscode-web/index.html).
+// It exists so bare `cargo check`/clippy and CI rust-check work without a
+// frontend build; keep these bytes in sync with the committed file.
+const PLACEHOLDER_HTML = `<!-- tauri: placeholder frontend. Tracked with \`git add -f\` so that
+     tauri::generate_context! (which requires frontendDist to exist) works for
+     bare \`cargo check\`/clippy and CI rust-check without a frontend build.
+     \`npm run tauri:web\` replaces this whole directory with the real VS Code
+     web workbench before \`tauri build\`/\`tauri dev\` package or serve it. -->
+<!doctype html>
+<html>
+  <head><meta charset="utf-8"><title>Code - Tauri</title></head>
+  <body style="background:#1f1f1f;color:#ccc;font-family:sans-serif">
+    <p>Workbench frontend not built yet. Run <code>npm run tauri:web</code>.</p>
+  </body>
+</html>
+`;
+fs.writeFileSync(path.join(OUT_SITE, 'index.html'), PLACEHOLDER_HTML);
 
 const stats = dirStats(OUT_SITE);
 console.log(`[tauri:web] done: ${stats.files} files, ${stats.mb} MB in out/vscode-web`);

@@ -1,18 +1,16 @@
-# Tauri migration — Phase 0/1 (see ROADMAP.md).
+# Tauri migration CI (see ROADMAP.md).
 #
 # ACTIVATION NOTE FOR MAINTAINERS: the automation connection in the dev
 # sandbox cannot create or modify files under .github/workflows/. Copy THIS
 # file over `.github/workflows/tauri.yml` to activate (one-time per change;
 # the copy at .github/workflows/tauri.yml is the source of truth).
-#
-# Structure:
-#   rust-check    — fast compile gate (fmt/clippy/check) on Linux/Windows/macOS
+#   rust-check    — compile gate (fmt/clippy/check); currently windows-only per maintainer's minutes trade-off (restore Linux/macOS before Phase 5)
 #   build-windows — full release build: web workbench + Tauri bundle + installer artifacts
 name: Tauri Shell Checks
 
 on:
   push:
-    branches: ['arena/01a06ddd-vscode', 'main']
+    branches: ['arena/01a06ddd-vscode']
     paths: ['src-tauri/**', 'dist-tauri/**', 'scripts/tauri/**', '.github/workflows/tauri.yml']
   pull_request:
     paths: ['src-tauri/**', 'dist-tauri/**', 'scripts/tauri/**', '.github/workflows/tauri.yml']
@@ -27,7 +25,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4

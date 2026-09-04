@@ -41,19 +41,19 @@ Replace the Electron window with a Tauri window that loads the genuine VS Code w
 
 ---
 
-## Phase 2 — Core platform services in Rust ⬜
+## Phase 2 — Core platform services in Rust 🟨
 
 Service-by-service A→B→C porting. **Each service is its own commit series + parity checklist + ledger row.**
 
-| Service | Upstream reference | Rust approach |
-|---|---|---|
-| File system | `src/vs/platform/files` | Tauri IPC file provider: read/write/stream/rename/copy/trash, encoding detection, atomic saves |
-| Search | ripgrep integration | ripgrep as library (`grep-searcher`/`grep-regex`/`ignore`), flag-compatible with the CLI invocation upstream uses |
-| File watcher | parcel watcher | `notify` crate + coalescing layer matching vscode event semantics (recursive, excludes) |
-| Configuration & user data | `src/vs/platform/configuration` | same file formats, same directories (`dataFolderName` from `product.json`) |
-| State storage | Electron storage (`stateService`) | SQLite (`rusqlite`), same keys/schema semantics |
-| Secret storage | Electron safeStorage | `keyring` crate (OS keychain) |
-| Process exec | child_process usage | `tokio::process` with upstream flag/exit-code semantics |
+| Service | Upstream reference | Rust approach | Status |
+|---|---|---|---|
+| File system | `src/vs/platform/files` | Tauri IPC file provider: read/write/stream/rename/copy/trash, encoding detection, atomic saves | 🟨 slice A state **B**: `files.rs` (stat/exists/readdir/read/write/mkdir/rename/delete) + `TauriFileSystemProvider` seam registered in `web.main.ts` — watching/trash/atomic-save/raw-IPC pending ([parity/files.md](docs/tauri/parity/files.md)) |
+| Search | ripgrep integration | ripgrep as library (`grep-searcher`/`grep-regex`/`ignore`), flag-compatible with the CLI invocation upstream uses | ⬜ |
+| File watcher | parcel watcher | `notify` crate + coalescing layer matching vscode event semantics (recursive, excludes) | ⬜ (next slice) |
+| Configuration & user data | `src/vs/platform/configuration` | same file formats, same directories (`dataFolderName` from `product.json`) | ⬜ |
+| State storage | Electron storage (`stateService`) | SQLite (`rusqlite`), same keys/schema semantics | ⬜ |
+| Secret storage | Electron safeStorage | `keyring` crate (OS keychain) | ⬜ |
+| Process exec | child_process usage | `tokio::process` with upstream flag/exit-code semantics | ⬜ |
 
 **Exit criteria:** open folder → edit → save → search/replace across files → settings persist across restart — all through the Rust backend, indistinguishable from Electron.
 
@@ -113,7 +113,7 @@ Copy-Then-Delete states — **A** original → **B** dual → **C** cutover → 
 
 | Module | State | Rust/Tauri home | Parity doc | Deleted in |
 |---|---|---|---|---|
-| *(empty — scaffold only so far)* | | | | |
+| File system provider (scheme `file`, web shell path) | **B** | `src-tauri/src/services/files.rs` + `src/vs/workbench/services/tauri/browser/tauriFileSystemProvider.ts` | [docs/tauri/parity/files.md](docs/tauri/parity/files.md) | — |
 
 ---
 
@@ -121,11 +121,14 @@ Copy-Then-Delete states — **A** original → **B** dual → **C** cutover → 
 
 | Gap | Planned phase |
 |---|---|
-| No filesystem access from the workbench | 2 |
+| File watching is a no-op in the Tauri shell (explorer doesn't auto-refresh) | 2 (watcher slice) |
+| `useTrash` deletes rejected; permanent delete only | 2 |
+| File IPC uses JSON payloads (slow for big files); raw ArrayBuffer planned | 2 (before files State C) |
 | No integrated terminal | 3 |
 | No desktop extension host | 4 |
 | WebKitGTK / WKWebView rendering & IME audit not yet run | 5 |
 | Rust compile checks can't run in this sandbox (no crates.io egress) — CI covers them | 0 |
+| CI rust-check currently Windows-only (maintainer's minutes trade-off); restore Linux/macOS gates before Phase 5 platform hardening | 5 |
 | 3 marketplace built-ins (js-debug, js-debug-companion, js-profile-table) are **disabled in sandbox builds only** (`~/.vscode-oss-dev/extensions/control.json`) because the release-assets CDN is blocked here; normal machines build them from GitHub releases automatically | 1 |
 | Sandbox web bundle is unminified (`vscode-web-ci`); releases use `vscode-web-min` | 5 |
 | Dynamic workbench bootstrap (per-request nonce, query-driven folder open) is pre-rendered static for now; the Rust custom protocol replaces this when window/query parity lands | 1–2 |
@@ -145,9 +148,9 @@ Copy-Then-Delete states — **A** original → **B** dual → **C** cutover → 
 
 ## Next up
 
-1. Maintainer: copy `docs/tauri/ci/tauri-workflow.yml` over `.github/workflows/tauri.yml` (corrected workflow), then watch CI
-2. On a Rust machine: `npm run tauri:web && npm run tauri:dev` → verify the real workbench boots; capture screenshots into `docs/tauri/parity/shell.md`
-3. Begin Phase 2 seam design: `files` service (Rust `files.rs` + TS adapter at the workbench factory seam)
+1. Maintainer: sync `.github/workflows/tauri.yml` from `docs/tauri/ci/tauri-workflow.yml` when CI changes are needed
+2. On a Rust machine: `npm run tauri:web && npm run tauri:dev` → verify the workbench boots **and** Phase 2 slice A: open a folder via `workbench.html?folder=file:///some/path`, edit + save a file (writes go through Rust `files.rs`)
+3. Phase 2 next slices: Rust file watcher (`notify` + event coalescing) → trash service → raw-IPC file reads + atomic writes → then `search` (ripgrep libs)
 
 ---
 

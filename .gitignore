@@ -56,6 +56,4 @@ dist
 .agent-validation/
 
 # Tauri migration (see ROADMAP.md / AGENTS.md)
-dist-tauri/*
-!dist-tauri/index.html
 src-tauri/target/

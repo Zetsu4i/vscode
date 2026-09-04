@@ -53,7 +53,7 @@ Additional rules:
 | `src-tauri/src/services/<name>.rs` | One Rust module per upstream platform service, mirroring upstream names (`files`, `search`, `pty`, `windows`, …) |
 | `cli/**` | Upstream's existing Rust CLI (`code-cli` crate, incl. tunnels). **Reuse it; never fork or duplicate it** |
 | `docs/tauri/**` | Architecture, ADRs, parity checklists |
-| `dist-tauri/` | Frontend served inside the webview. Only the placeholder page is committed; the built VS Code web workbench lands here in Phase 1 (gitignored) |
+| `out/vscode-web/` | Frontend served inside the webview. `index.html` placeholder is committed (force-added) so bare `cargo check`/CI work without a frontend build; `npm run tauri:web` replaces the directory with the built VS Code web workbench (gitignored) |
 
 ## M-3. Parity discipline
 
