@@ -40,7 +40,9 @@
 Goal: replace the Electron main-process shell with a Tauri shell that opens the
 existing VS Code workbench web UI without changing that UI.
 
-- [ ] Scaffold `src-tauri/` (Cargo project + `tauri.conf.json`).
+- [~] Scaffold `src-tauri/` (Cargo project + `tauri.conf.json`). Design notes
+      are in `src-tauri/README.md`. The real scaffold is not committed yet so
+      the release workflow does not publish a placeholder app.
 - [ ] Implement the window lifecycle, title bar, menus, dock behavior, and
       single-instance behavior to match Electron settings.
 - [ ] Serve/load the existing VS Code workbench assets (Monaco + workbench)
@@ -55,8 +57,11 @@ The app opens the same workbench with the same layout, themes, and first-run
 experience; window behavior and restore behavior match the reference.
 
 **Phase 1 log**
-- Nothing implemented yet. The workflow currently skips when
-  `src-tauri/tauri.conf.json` is absent.
+- Added `src-tauri/README.md` with the shell architecture direction and a clear
+  gate: do not add `tauri.conf.json` until the shell can load the real VS Code
+  workbench assets.
+- No Rust scaffold is committed yet. This keeps the release workflow from
+  publishing a placeholder app.
 
 ---
 
