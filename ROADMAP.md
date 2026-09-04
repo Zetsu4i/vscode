@@ -57,7 +57,8 @@ Goal: window opens into the genuine VS Code workbench with our services wired.
 - [x] Serve pristine workbench with product/config injection
 - [x] `file` scheme provider so folders/files resolve on disk
 - [x] Native Open File / Open Folder (rfd) through the upstream dialog flow
-- [ ] CI green end-to-end on both platforms (client build + bundle)
+- [x] CI green end-to-end on both platforms (client build + bundle) — run 33926758651:
+      tsc full-tree gate + gulp vscode-web-ci + NSIS/deb/AppImage + auto-release (dev-5)
 - [ ] Manual smoke checklist recorded here: open folder → explorer tree,
       open/edit/save file, create/delete/rename via explorer, settings editor,
       theme switch, keybindings, command palette, quick open
@@ -144,3 +145,10 @@ verified. Each deletion is its own patch, applied step by step.
 
 - 2026-09-05: Architecture pivot — upstream-first approach replaces the
   discarded lookalike app. Phase 0 complete, Phase 1 in progress.
+- 2026-09-05: First fully green pipeline (run 33926758651, release dev-5 with
+  NSIS installer; Linux glob fix lands in dev-6). Note: the non-ci gulp task's
+  "angler" mangler fails on upstream's own code at 1.136.1 (vs/sessions
+  protected-field accesses) — we build with upstream's product-build task
+  (`vscode-web-ci`) and keep a full-tree `tsc --noEmit` gate instead.
+  Follow-up: evaluate `vscode-web-min-ci` to shrink the Linux AppImage
+  (~180MB unminified artifact).
