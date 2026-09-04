@@ -18,7 +18,7 @@ Set up scaffolding, tooling, and rules. Zero behavior change to the Electron app
 - ✅ This roadmap: phase gates, deletion ledger, known gaps
 - ✅ Target architecture + initial ADRs (`docs/tauri/`)
 - ✅ Tauri 2 scaffold (`src-tauri/`) with placeholder shell window (`npm run tauri:dev` wiring included)
-- ✅ CI: `cargo fmt/clippy/check` on Linux/Windows/macOS (`.github/workflows/tauri.yml`)
+- ⏸ CI: `cargo fmt/clippy/check` on Linux/Windows/macOS — workflow file ready at `docs/tauri/ci/tauri-workflow.yml`; **blocked**: needs a maintainer to copy it to `.github/workflows/tauri.yml` (sandbox GitHub connection lacks the `workflows` permission)
 - ⬜ Verify `npm ci` + baseline Electron compile in a long-running session (huge install)
 - ⬜ Identify + script the web workbench bundle task (`build/gulpfile.vscode.web.ts`) → output to `dist-tauri/`
 - ✅ Parity checklist template ready for use (`docs/tauri/parity/README.md`)
