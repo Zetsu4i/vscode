@@ -19,12 +19,8 @@
 
 - [x] Define migration rules in `AGENTS.md`.
 - [x] Publish the phase plan in `ROADMAP.md`.
-- [~] Add `Tauri release build` workflow that runs on pushes to this branch and
-      creates GitHub Releases after successful Windows NSIS builds. The workflow
-      is written and committed locally, but the current GitHub App token lacks
-      the `workflows` permission, so it could not be pushed into
-      `.github/workflows/` yet. See `docs/tauri-release.workflow.yml` for the
-      same file pending activation.
+- [x] Add `Tauri release build` workflow that runs on pushes to this branch and
+      creates GitHub Releases after successful Windows NSIS builds.
 - [x] Add `.gitignore` entries for Rust/Tauri build artifacts.
 - [ ] Add a reference clone of upstream `microsoft/vscode` to a local
       non-migration folder for behavior diffing (`~/vscode-ref`).
@@ -198,12 +194,8 @@ toolchain.
 - **2026-09-04 — Phase 0**
   - Added `AGENTS.md` with agent migration rules and parity gates.
   - Added `ROADMAP.md`.
-  - Added `docs/tauri-release.workflow.yml` (the Tauri release workflow) and
-    `.gitignore` entries for Rust/Tauri artifacts.
-  - The workflow could not be committed into `.github/workflows/` yet because
-    the GitHub App token used by this session does not have the `workflows`
-    permission. The file is preserved in `docs/tauri-release.workflow.yml`; it
-    must be copied to `.github/workflows/tauri-release.yml` when a token with
-    `workflows` scope is available.
+  - Added `.github/workflows/tauri-release.yml` with automatic GitHub releases
+    after successful Windows NSIS builds, and `.gitignore` entries for
+    Rust/Tauri artifacts.
   - **No Rust engine has been built yet.** This must not be mistaken for
     completion of Phase 1+.
