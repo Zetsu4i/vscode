@@ -28,6 +28,8 @@ This repository is migrating **VS Code (fork of 1.137.0) from Electron to a Taur
 
 ## M-1. The Copy-Then-Delete rule (the core of the whole migration)
 
+> **Mandatory Agent Directive:** Keep old code in its folder until it is fully copied and reimplemented, then delete reimplemented code step by step so that we have an exact copy of the original code. Never prematurely remove code before its replacement is 100% verified.
+
 Original code is never deleted until its replacement is proven equivalent — and the deletion is always its own dedicated commit. Every Electron-owned module goes through these states, tracked in the **Deletion Ledger** in `ROADMAP.md`:
 
 | State | Name | Meaning | Rules |
@@ -82,7 +84,8 @@ Additional rules:
 
 - Force pushes, history rewrites, or anything that touches `.git`.
 - Deleting or weakening existing tests; port them along with the code.
-- Replacing the workbench web client or Monaco with alternative UIs.
+- Hallucinating or rebuilding UI/features: Replacing the workbench web client, Monaco, themes, or layouts with custom UI is strictly forbidden. The VS Code look, feel, and behavior must remain 100% identical.
+- Premature code deletion: Removing original code before its replacement is 100% implemented, verified against the parity checklist, and passes CI checks. Reusable code must be preserved.
 - Swapping out upstream dependencies inside `src/vs/**`.
 - Editing generated paths (`out/`, `out-vscode*`, `node_modules`, `dist-tauri/*` except the committed placeholder page).
 - Inventing new product behavior upstream doesn't have (features require an ADR + roadmap entry).

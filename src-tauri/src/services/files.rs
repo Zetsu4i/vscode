@@ -97,7 +97,7 @@ pub async fn fs_exists(path: String) -> Result<bool, String> {
 /// Mirrors `IFileSystemProvider.readdir`: entries as `[name, FileType]` tuples.
 #[tauri::command]
 pub async fn fs_readdir(path: String) -> Result<Vec<(String, u8)>, String> {
-    let mut rd = tokio::fs::read_dir(&path).await;
+    let rd = tokio::fs::read_dir(&path).await;
     match rd {
         Err(e) => Err(e.to_string()),
         Ok(mut rd) => {

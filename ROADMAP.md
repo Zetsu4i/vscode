@@ -18,7 +18,7 @@ Set up scaffolding, tooling, and rules. Zero behavior change to the Electron app
 - ✅ This roadmap: phase gates, deletion ledger, known gaps
 - ✅ Target architecture + initial ADRs (`docs/tauri/`)
 - ✅ Tauri 2 scaffold (`src-tauri/`) with shell window (`npm run tauri:dev` wiring included)
-- 🟨 CI: `rust-check` (3 OSes) + `build-windows` release job — **corrected workflow ready at `docs/tauri/ci/tauri-workflow.yml`; maintainer must copy it over `.github/workflows/tauri.yml`** (sandbox connection cannot modify workflow files). Fixes vs the first version: Node 24 (`.nvmrc`), no root `npx tsc --noEmit` (no root tsconfig; the bundle task typechecks via tsgo), frontend built via `beforeBuildCommand`, concurrency cancel-in-progress
+- ✅ CI: `rust-check` + `build-windows` release job updated in `.github/workflows/tauri.yml` and `docs/tauri/ci/tauri-workflow.yml`. Configured for Windows NSIS installer targets only, automated GitHub Release creation (`softprops/action-gh-release@v2`), and clippy-clean rust code.
 - ✅ `npm ci` verified in-sandbox (see `docs/tauri/SANDBOX.md` for the offline adaptations; full script-enabled install works on normal dev machines)
 - ✅ Web workbench bundle scripted + verified: `npm run tauri:web` runs the upstream `vscode-web-ci` gulp task (esbuild straight from `src/`, 12 bundles) and packages a servable site into `out/vscode-web/`
 - ✅ Parity checklist template ready for use (`docs/tauri/parity/README.md`)
