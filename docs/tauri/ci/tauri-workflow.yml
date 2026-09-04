@@ -1,19 +1,32 @@
-# Tauri migration CI (see ROADMAP.md).
+# Tauri migration — Phase 0/1/2 (see ROADMAP.md).
 #
-# ACTIVATION NOTE FOR MAINTAINERS: the automation connection in the dev
-# sandbox cannot create or modify files under .github/workflows/. Copy THIS
-# file over `.github/workflows/tauri.yml` to activate (one-time per change;
-# the copy at .github/workflows/tauri.yml is the source of truth).
-#   rust-check    — compile gate (fmt/clippy/check); currently windows-only per maintainer's minutes trade-off (restore Linux/macOS before Phase 5)
-#   build-windows — full release build: web workbench + Tauri bundle + installer artifacts
+# Structure:
+#   rust-check    — fast compile gate (fmt/clippy/check) on Windows/Linux/macOS
+#   build-windows — full release build: web workbench + Tauri bundle (NSIS only) + GitHub release creation
 name: Tauri Shell Checks
 
 on:
   push:
-    branches: ['arena/01a06ddd-vscode']
-    paths: ['src-tauri/**', 'dist-tauri/**', 'scripts/tauri/**', '.github/workflows/tauri.yml']
+    branches: ['arena/01a06e68-vscode', 'arena/*', 'main']
+    paths:
+      - 'src-tauri/**'
+      - 'dist-tauri/**'
+      - 'scripts/tauri/**'
+      - 'src/**'
+      - '.github/workflows/tauri.yml'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'ROADMAP.md'
+      - 'AGENTS.md'
   pull_request:
-    paths: ['src-tauri/**', 'dist-tauri/**', 'scripts/tauri/**', '.github/workflows/tauri.yml']
+    paths:
+      - 'src-tauri/**'
+      - 'dist-tauri/**'
+      - 'scripts/tauri/**'
+      - 'src/**'
+      - '.github/workflows/tauri.yml'
+      - 'package.json'
+      - 'package-lock.json'
   workflow_dispatch:
 
 concurrency:
@@ -59,6 +72,8 @@ jobs:
     needs: rust-check
     runs-on: windows-latest
     timeout-minutes: 120
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
@@ -83,11 +98,12 @@ jobs:
 
       # `tauri build` runs `beforeBuildCommand` (npm run tauri:web) from tauri.conf.json,
       # which bundles the real VS Code web workbench into out/vscode-web.
-      - name: Build Tauri app (with VS Code web workbench)
+      # Only NSIS bundle is built for Windows targets.
+      - name: Build Tauri app (NSIS bundle only)
         env:
           NODE_OPTIONS: '--max-old-space-size=8192'
           GOGC: 50
-        run: npx tauri build
+        run: npx tauri build --bundles nsis
 
       - name: Upload Windows artifacts (NSIS)
         uses: actions/upload-artifact@v4
@@ -96,9 +112,23 @@ jobs:
           path: src-tauri/target/release/bundle/nsis/*.exe
           if-no-files-found: warn
 
-      - name: Upload Windows artifacts (MSI)
-        uses: actions/upload-artifact@v4
+      - name: Create or Update GitHub Release
+        if: success()
+        uses: softprops/action-gh-release@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          name: vstauri-windows-msi
-          path: src-tauri/target/release/bundle/msi/*.msi
-          if-no-files-found: warn
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || format('build-{0}', github.run_number) }}
+          name: ${{ format('Code - Tauri Windows Build #{0}', github.run_number) }}
+          body: |
+            Automated Release Build for Code - Tauri (Windows NSIS Installer).
+            
+            - Commit: ${{ github.sha }}
+            - Branch: ${{ github.ref_name }}
+            - Workflow Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+            
+            This release contains the standalone NSIS installer package for Windows.
+          draft: false
+          prerelease: true
+          files: |
+            src-tauri/target/release/bundle/nsis/*.exe

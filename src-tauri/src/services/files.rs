@@ -46,13 +46,9 @@ fn file_type_of(is_symlink: bool, is_dir: bool, is_file: bool) -> u8 {
 }
 
 fn epoch_millis(time: std::io::Result<std::time::SystemTime>) -> u64 {
-    let millis = time
-        .ok()
-        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok());
-    match millis {
-        Some(d) => d.as_millis() as u64,
-        None => 0,
-    }
+    time.ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map_or(0, |d| u64::try_from(d.as_millis()).unwrap_or(u64::MAX))
 }
 
 fn permissions_of(md: &std::fs::Metadata) -> Option<u8> {
@@ -77,96 +73,68 @@ fn stat_from_metadata(md: std::fs::Metadata) -> FileStat {
 /// Mirrors `IFileSystemProvider.stat` (lstat semantics: does not follow symlinks).
 #[tauri::command]
 pub async fn fs_stat(path: String) -> Result<FileStat, String> {
-    let md = tokio::fs::symlink_metadata(&path).await;
-    match md {
-        Ok(md) => Ok(stat_from_metadata(md)),
-        Err(e) => Err(e.to_string()),
-    }
+    tokio::fs::symlink_metadata(&path)
+        .await
+        .map(stat_from_metadata)
+        .map_err(|e| e.to_string())
 }
 
 /// Existence probe used before operations that must not create anything.
 #[tauri::command]
 pub async fn fs_exists(path: String) -> Result<bool, String> {
-    let exists = tokio::fs::try_exists(&path).await;
-    match exists {
-        Ok(exists) => Ok(exists),
-        Err(e) => Err(e.to_string()),
-    }
+    tokio::fs::try_exists(&path)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 /// Mirrors `IFileSystemProvider.readdir`: entries as `[name, FileType]` tuples.
 #[tauri::command]
 pub async fn fs_readdir(path: String) -> Result<Vec<(String, u8)>, String> {
-    let mut rd = tokio::fs::read_dir(&path).await;
-    match rd {
-        Err(e) => Err(e.to_string()),
-        Ok(mut rd) => {
-            let mut entries = Vec::new();
-            loop {
-                let next = rd.next_entry().await;
-                match next {
-                    Err(e) => return Err(e.to_string()),
-                    Ok(None) => return Ok(entries),
-                    Ok(Some(entry)) => {
-                        let name = entry.file_name().to_string_lossy().into_owned();
-                        let ft = entry.file_type().await;
-                        let file_type = match ft {
-                            Err(e) => return Err(e.to_string()),
-                            Ok(ft) => file_type_of(ft.is_symlink(), ft.is_dir(), ft.is_file()),
-                        };
-                        entries.push((name, file_type));
-                    }
-                }
-            }
-        }
+    let mut rd = tokio::fs::read_dir(&path)
+        .await
+        .map_err(|e| e.to_string())?;
+    let mut entries = Vec::new();
+    while let Some(entry) = rd.next_entry().await.map_err(|e| e.to_string())? {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        let ft = entry.file_type().await.map_err(|e| e.to_string())?;
+        let file_type = file_type_of(ft.is_symlink(), ft.is_dir(), ft.is_file());
+        entries.push((name, file_type));
     }
+    Ok(entries)
 }
 
 /// Mirrors `IFileSystemProvider.readFile`.
 #[tauri::command]
 pub async fn fs_read_file(path: String) -> Result<Vec<u8>, String> {
-    let data = tokio::fs::read(&path).await;
-    match data {
-        Ok(data) => Ok(data),
-        Err(e) => Err(e.to_string()),
-    }
+    tokio::fs::read(&path).await.map_err(|e| e.to_string())
 }
 
 /// Mirrors `IFileSystemProvider.writeFile` (slice A: direct write;
 /// upstream's atomic tmp-file+rename save lands before State C).
 #[tauri::command]
 pub async fn fs_write_file(path: String, contents: Vec<u8>) -> Result<(), String> {
-    let written = tokio::fs::write(&path, contents).await;
-    match written {
-        Ok(()) => Ok(()),
-        Err(e) => Err(e.to_string()),
-    }
+    tokio::fs::write(&path, contents)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 /// Mirrors `IFileService.mkdir` (creates all missing parents).
 #[tauri::command]
 pub async fn fs_mkdir(path: String) -> Result<(), String> {
-    let created = tokio::fs::create_dir_all(&path).await;
-    match created {
-        Ok(()) => Ok(()),
-        Err(e) => Err(e.to_string()),
-    }
+    tokio::fs::create_dir_all(&path)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 /// Mirrors `IFileSystemProvider.rename` with `IFileOverwriteOptions.overwrite`.
 #[tauri::command]
 pub async fn fs_rename(from: String, to: String, overwrite: bool) -> Result<(), String> {
-    if overwrite {
-        let target_exists = tokio::fs::try_exists(&to).await.unwrap_or(false);
-        if target_exists {
-            fs_delete_impl(&to, true).await?;
-        }
+    if overwrite && tokio::fs::try_exists(&to).await.unwrap_or(false) {
+        fs_delete_impl(&to, true).await?;
     }
-    let renamed = tokio::fs::rename(&from, &to).await;
-    match renamed {
-        Ok(()) => Ok(()),
-        Err(e) => Err(e.to_string()),
-    }
+    tokio::fs::rename(&from, &to)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 /// Mirrors `IFileSystemProvider.delete` with `IFileDeleteOptions`.
@@ -182,23 +150,20 @@ pub async fn fs_delete(path: String, recursive: bool, use_trash: bool) -> Result
 }
 
 async fn fs_delete_impl(path: &str, recursive: bool) -> Result<(), String> {
-    let md = tokio::fs::symlink_metadata(path).await;
-    match md {
-        Err(e) => Err(e.to_string()),
-        Ok(md) => {
-            let removed = if md.is_dir() {
-                if recursive {
-                    tokio::fs::remove_dir_all(path).await
-                } else {
-                    tokio::fs::remove_dir(path).await
-                }
-            } else {
-                tokio::fs::remove_file(path).await
-            };
-            match removed {
-                Ok(()) => Ok(()),
-                Err(e) => Err(e.to_string()),
-            }
+    let md = tokio::fs::symlink_metadata(path)
+        .await
+        .map_err(|e| e.to_string())?;
+    if md.is_dir() {
+        if recursive {
+            tokio::fs::remove_dir_all(path)
+                .await
+                .map_err(|e| e.to_string())
+        } else {
+            tokio::fs::remove_dir(path).await.map_err(|e| e.to_string())
         }
+    } else {
+        tokio::fs::remove_file(path)
+            .await
+            .map_err(|e| e.to_string())
     }
 }
