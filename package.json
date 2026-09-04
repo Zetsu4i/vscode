@@ -10,6 +10,7 @@
   "type": "module",
   "private": true,
   "scripts": {
+    "build": "mkdir -p dist && cp index.html dist/",
     "tauri": "npx @tauri-apps/cli",
     "tauri:dev": "npx @tauri-apps/cli dev",
     "tauri:build": "npx @tauri-apps/cli build",
