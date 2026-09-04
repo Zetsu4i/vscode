@@ -183,6 +183,6 @@ jobs:
             (upstream ${{ needs.build-client.outputs.tag }}) served by the Rust backbone.
           prerelease: true
           files: |
-            dist/*.exe
-            dist/*.deb
-            dist/*.AppImage
+            dist/**/*.exe
+            dist/**/*.deb
+            dist/**/*.AppImage
