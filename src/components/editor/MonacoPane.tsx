@@ -6,6 +6,7 @@ import { useUiStore } from "../../state/uiStore";
 import { useWorkspaceStore } from "../../state/workspaceStore";
 import { useSettingsStore } from "../../state/settingsStore";
 import { languageForPath } from "../../util/paths";
+import { registerLanguageConfigs } from "../../util/languageConfig";
 import HexView from "./HexView";
 
 // ---- module-level singletons (shared across editor groups) -----------------
@@ -284,6 +285,7 @@ export default function MonacoPane({ path }: { path: string }) {
 
   useEffect(() => {
     registerProviders();
+    registerLanguageConfigs();
 
     if (!diagnosticsListenerBound) {
       diagnosticsListenerBound = true;
