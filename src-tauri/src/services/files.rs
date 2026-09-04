@@ -45,82 +45,126 @@ fn file_type_of(is_symlink: bool, is_dir: bool, is_file: bool) -> u8 {
     }
 }
 
-fn stat_from_metadata(md: std::fs::Metadata) -> FileStat {
-    let file_type = file_type_of(md.file_type().is_symlink(), md.is_dir(), md.is_file());
-    let epoch_millis = |t: std::io::Result<std::time::SystemTime>| -> u64 {
-        t.ok()
-            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-            .map(|d| d.as_millis() as u64)
-            .unwrap_or(0)
-    };
-    let permissions = if md.permissions().readonly() {
+fn epoch_millis(time: std::io::Result<std::time::SystemTime>) -> u64 {
+    let millis = time.ok().and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok());
+    match millis {
+        Some(d) => d.as_millis() as u64,
+        None => 0,
+    }
+}
+
+fn permissions_of(md: &std::fs::Metadata) -> Option<u8> {
+    if md.permissions().readonly() {
         Some(FILE_PERMISSION_READONLY)
     } else {
         None
-    };
+    }
+}
+
+fn stat_from_metadata(md: std::fs::Metadata) -> FileStat {
+    let file_type = file_type_of(md.file_type().is_symlink(), md.is_dir(), md.is_file());
     FileStat {
         file_type,
         ctime: epoch_millis(md.created()),
         mtime: epoch_millis(md.modified()),
         size: md.len(),
-        permissions,
+        permissions: permissions_of(&md),
     }
 }
 
 /// Mirrors `IFileSystemProvider.stat` (lstat semantics: does not follow symlinks).
 #[tauri::command]
 pub async fn fs_stat(path: String) -> Result<FileStat, String> {
-    let md = tokio::fs::symlink_metadata(&path)
-        .await
-        .map_err(|e| e.to_string())?;
-    Ok(stat_from_metadata(md))
+    let md = tokio::fs::symlink_metadata(&path).await;
+    match md {
+        Ok(md) => Ok(stat_from_metadata(md)),
+        Err(e) => Err(e.to_string()),
+    }
 }
 
 /// Existence probe used before operations that must not create anything.
 #[tauri::command]
 pub async fn fs_exists(path: String) -> Result<bool, String> {
-    tokio::fs::try_exists(&path).await.map_err(|e| e.to_string())
+    let exists = tokio::fs::try_exists(&path).await;
+    match exists {
+        Ok(exists) => Ok(exists),
+        Err(e) => Err(e.to_string()),
+    }
 }
 
 /// Mirrors `IFileSystemProvider.readdir`: entries as `[name, FileType]` tuples.
 #[tauri::command]
 pub async fn fs_readdir(path: String) -> Result<Vec<(String, u8)>, String> {
-    let mut entries = Vec::new();
-    let mut rd = tokio::fs::read_dir(&path).await.map_err(|e| e.to_string())?;
-    while let Some(entry) = rd.next_entry().await.map_err(|e| e.to_string())? {
-        let ft = entry.file_type().await.map_err(|e| e.to_string())?;
-        let file_type = file_type_of(ft.is_symlink(), ft.is_dir(), ft.is_file());
-        entries.push((entry.file_name().to_string_lossy().into_owned(), file_type));
+    let mut rd = tokio::fs::read_dir(&path).await;
+    match rd {
+        Err(e) => Err(e.to_string()),
+        Ok(mut rd) => {
+            let mut entries = Vec::new();
+            loop {
+                let next = rd.next_entry().await;
+                match next {
+                    Err(e) => return Err(e.to_string()),
+                    Ok(None) => return Ok(entries),
+                    Ok(Some(entry)) => {
+                        let name = entry.file_name().to_string_lossy().into_owned();
+                        let ft = entry.file_type().await;
+                        let file_type = match ft {
+                            Err(e) => return Err(e.to_string()),
+                            Ok(ft) => file_type_of(ft.is_symlink(), ft.is_dir(), ft.is_file()),
+                        };
+                        entries.push((name, file_type));
+                    }
+                }
+            }
+        }
     }
-    Ok(entries)
 }
 
 /// Mirrors `IFileSystemProvider.readFile`.
 #[tauri::command]
 pub async fn fs_read_file(path: String) -> Result<Vec<u8>, String> {
-    tokio::fs::read(&path).await.map_err(|e| e.to_string())
+    let data = tokio::fs::read(&path).await;
+    match data {
+        Ok(data) => Ok(data),
+        Err(e) => Err(e.to_string()),
+    }
 }
 
 /// Mirrors `IFileSystemProvider.writeFile` (slice A: direct write;
 /// upstream's atomic tmp-file+rename save lands before State C).
 #[tauri::command]
 pub async fn fs_write_file(path: String, contents: Vec<u8>) -> Result<(), String> {
-    tokio::fs::write(&path, contents).await.map_err(|e| e.to_string())
+    let written = tokio::fs::write(&path, contents).await;
+    match written {
+        Ok(()) => Ok(()),
+        Err(e) => Err(e.to_string()),
+    }
 }
 
 /// Mirrors `IFileService.mkdir` (creates all missing parents).
 #[tauri::command]
 pub async fn fs_mkdir(path: String) -> Result<(), String> {
-    tokio::fs::create_dir_all(&path).await.map_err(|e| e.to_string())
+    let created = tokio::fs::create_dir_all(&path).await;
+    match created {
+        Ok(()) => Ok(()),
+        Err(e) => Err(e.to_string()),
+    }
 }
 
 /// Mirrors `IFileSystemProvider.rename` with `IFileOverwriteOptions.overwrite`.
 #[tauri::command]
 pub async fn fs_rename(from: String, to: String, overwrite: bool) -> Result<(), String> {
-    if overwrite && tokio::fs::try_exists(&to).await.unwrap_or(false) {
-        fs_delete_impl(&to, true).await?;
+    if overwrite {
+        let target_exists = tokio::fs::try_exists(&to).await.unwrap_or(false);
+        if target_exists {
+            fs_delete_impl(&to, true).await?;
+        }
     }
-    tokio::fs::rename(&from, &to).await.map_err(|e| e.to_string())
+    let renamed = tokio::fs::rename(&from, &to).await;
+    match renamed {
+        Ok(()) => Ok(()),
+        Err(e) => Err(e.to_string()),
+    }
 }
 
 /// Mirrors `IFileSystemProvider.delete` with `IFileDeleteOptions`.
@@ -129,22 +173,30 @@ pub async fn fs_rename(from: String, to: String, overwrite: bool) -> Result<(), 
 pub async fn fs_delete(path: String, recursive: bool, use_trash: bool) -> Result<(), String> {
     if use_trash {
         // Parity gap (ROADMAP known gaps): OS trash arrives with the watcher slice.
-        return Err("fs_delete: useTrash not implemented yet (see parity/files.md)".to_string());
+        let msg = "fs_delete: useTrash not implemented yet (see parity/files.md)";
+        return Err(msg.to_string());
     }
     fs_delete_impl(&path, recursive).await
 }
 
 async fn fs_delete_impl(path: &str, recursive: bool) -> Result<(), String> {
-    let md = tokio::fs::symlink_metadata(path)
-        .await
-        .map_err(|e| e.to_string())?;
-    if md.is_dir() {
-        if recursive {
-            tokio::fs::remove_dir_all(path).await.map_err(|e| e.to_string())
-        } else {
-            tokio::fs::remove_dir(path).await.map_err(|e| e.to_string())
+    let md = tokio::fs::symlink_metadata(path).await;
+    match md {
+        Err(e) => Err(e.to_string()),
+        Ok(md) => {
+            let removed = if md.is_dir() {
+                if recursive {
+                    tokio::fs::remove_dir_all(path).await
+                } else {
+                    tokio::fs::remove_dir(path).await
+                }
+            } else {
+                tokio::fs::remove_file(path).await
+            };
+            match removed {
+                Ok(()) => Ok(()),
+                Err(e) => Err(e.to_string()),
+            }
         }
-    } else {
-        tokio::fs::remove_file(path).await.map_err(|e| e.to_string())
     }
 }
