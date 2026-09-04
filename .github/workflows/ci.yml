@@ -68,9 +68,13 @@ jobs:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
         run: npm ci --no-audit --no-fund
 
-      - name: Build vscode-web client (gulp vscode-web)
+      - name: Typecheck (tsc --noEmit, full src incl. bridge)
         working-directory: upstream
-        run: npm run gulp vscode-web
+        run: node node_modules/.bin/tsc --noEmit -p src/tsconfig.json
+
+      - name: Build vscode-web client (gulp vscode-web-ci)
+        working-directory: upstream
+        run: npm run gulp vscode-web-ci
 
       - name: Upload client artifact
         uses: actions/upload-artifact@v4
