@@ -86,7 +86,7 @@ export class TauriTerminalBackend extends BaseTerminalBackend implements ITermin
 		this._onPtyHostConnected.fire();
 	}
 
-	get isResponsive(): boolean { return true; }
+	override get isResponsive(): boolean { return true; }
 
 	async createProcess(
 		shellLaunchConfig: IShellLaunchConfig,
@@ -182,7 +182,7 @@ export class TauriTerminalBackend extends BaseTerminalBackend implements ITermin
 
 	async persistTerminalState(): Promise<void> { /* no persistence yet */ }
 
-	restartPtyHost(): void { /* nothing to restart */ }
+	override restartPtyHost(): void { /* nothing to restart */ }
 
 	async installAutoReply(_match: string, _reply: string): Promise<void> { /* not supported */ }
 
