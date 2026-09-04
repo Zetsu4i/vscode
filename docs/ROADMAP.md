@@ -34,14 +34,14 @@ working app. Nothing merges if the app does not run.
 - [x] Editor settings: font size/ligatures, minimap toggle, word wrap,
       whitespace rendering, tab size (persisted; palette commands + keys)
 
-## Phase 2 — Personalization
+## Phase 2 — Personalization ✅
 
-- [ ] `settings.json` + Settings UI (scopes: user / workspace)
-- [ ] Theme engine: `contributes.themes` → workbench CSS variables + Monaco themes
-- [ ] Icon themes
-- [ ] Keybinding editor + user keybindings.json
-- [ ] Profiles: recent workspaces store, layout persistence, session restore
-- [ ] Auto-save, format-on-save (LSP `textDocument/formatting`)
+- [x] `settings.json` + Settings UI (scopes: user / workspace)
+- [x] Theme engine: `contributes.themes` → workbench CSS variables + Monaco themes
+- [x] Icon themes (inline-SVG "VSTauri Color" set + Minimal)
+- [x] Keybinding editor + user keybindings.json (press-to-capture, unbind rules)
+- [x] Session restore (editors + split layout per workspace) and window layout persistence; recent workspaces on the welcome page
+- [x] Auto-save (`afterDelay` + delay setting), format-on-save via LSP `textDocument/formatting`
 
 ## Phase 3 — Extensions
 

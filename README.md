@@ -13,7 +13,7 @@ the same workflow.
 
 ---
 
-## Status — Phase 1: Editing Depth
+## Status — Phase 2: Personalization
 
 | Area | Status | Notes |
 |---|---|---|
@@ -36,8 +36,17 @@ the same workflow.
 | LSP client | ✅ | stdio transport; diagnostics, hover, completions (rust-analyzer, tsserver, …) |
 | Problems panel | ✅ | fed by LSP diagnostics |
 | Extension system | 🟡 | manifests + discovery in place; WASM runtime is Phase 3 |
-| Settings UI, themes, keybinding editor | ⬜ | Phase 2 |
+| **settings.json (user + workspace scopes)** | ✅ | `<config>/vstauri/settings.json` + `<root>/.vstauri/settings.json`, merged & validated |
+| **Settings editor** | ✅ | Searchable, User/Workspace scope switch, typed controls, reset per setting (Ctrl+,) |
+| **Theme engine** | ✅ | Dark+ / Light+ / Monokai; workbench CSS vars + Monaco + xterm recolor live |
+| **Extension color themes** | ✅ | `contributes.themes` JSON → workbench vars + token rules |
+| **File icon themes** | ✅ | Inline-SVG icon set for 60+ file types; Minimal (none) theme |
+| **Keybindings editor + keybindings.json** | ✅ | Press-to-capture rebinding, unbind rules, user overrides persisted |
+| **Session restore** | ✅ | Open editors, active tab and split layout per workspace in `.vstauri/session.json` |
+| **Window layout persistence** | ✅ | Sidebar/panel geometry restored at startup |
+| **Auto-save + format-on-save** | ✅ | `files.autoSave=afterDelay`, LSP `textDocument/formatting` on save |
 | Debugger (DAP), tasks, remote | ⬜ | Phase 4+ |
+| Profiles, multi-root workspaces | ⬜ | Phase 4 |
 
 ## Why Tauri
 
@@ -114,8 +123,44 @@ Override or add servers per workspace with `.vstauri/lsp.json`:
 | `Ctrl+N` | New file |
 | `Ctrl+\` | Split editor right |
 | `Ctrl+=` / `Ctrl+-` | Font zoom in / out |
+| `Ctrl+,` | Settings |
 | `Alt+Z` | Toggle word wrap |
 | `Ctrl+Shift+E / F / G / M` | Explorer / Search / SCM / Problems |
+
+Every binding can be changed or unbound in **Keyboard Shortcuts**
+(`Ctrl+Shift+P` → "Open Keyboard Shortcuts"); user overrides live in
+`keybindings.json` under the user config directory.
+
+## Settings
+
+Settings are plain JSON, stored per scope and merged
+(defaults < user < workspace — workspace wins):
+
+| Scope | Location |
+|---|---|
+| user | `<config>/vstauri/settings.json` (Linux `~/.config/vstauri`, Windows `%APPDATA%\vstauri`) |
+| workspace | `<root>/.vstauri/settings.json` |
+
+```jsonc
+// example
+{
+  "workbench.colorTheme": "Monokai",
+  "editor.fontSize": 15,
+  "files.autoSave": "afterDelay",
+  "files.autoSaveDelay": 2,
+  "editor.formatOnSave": true
+}
+```
+
+Available ids (see the Settings editor for the full, searchable list with
+defaults): `workbench.colorTheme`, `workbench.iconTheme`, `editor.fontSize`,
+`editor.fontFamily`, `editor.fontLigatures`, `editor.tabSize`, `editor.wordWrap`,
+`editor.minimap.enabled`, `editor.renderWhitespace`, `editor.stickyScroll.enabled`,
+`breadcrumbs.enabled`, `editor.formatOnSave`, `files.autoSave`,
+`files.autoSaveDelay`.
+
+Per-workspace state (open editors, split layout, active tab) is restored from
+`<root>/.vstauri/session.json`; window layout lives with the window.
 
 ## Architecture in one screen
 
