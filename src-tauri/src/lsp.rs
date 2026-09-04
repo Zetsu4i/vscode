@@ -438,3 +438,36 @@ pub async fn lsp_hover(
     .await?;
     Ok(if result.is_null() { None } else { Some(result) })
 }
+
+/// `textDocument/formatting` — returns the server's edits; the client applies
+/// them to the buffer before writing, enabling format-on-save.
+#[tauri::command]
+pub async fn lsp_format(
+    state: State<'_, LspState>,
+    language: String,
+    path: String,
+    tab_size: u32,
+) -> Result<Vec<Value>, String> {
+    let server = state
+        .servers
+        .lock()
+        .await
+        .get(&language)
+        .cloned()
+        .ok_or_else(|| format!("LSP '{}' is not running", language))?;
+    let result = send_request(
+        &server,
+        "textDocument/formatting",
+        json!({
+            "textDocument": { "uri": path_to_uri(&path) },
+            "options": { "tabSize": tab_size, "insertSpaces": true }
+        }),
+        10_000,
+    )
+    .await?;
+    Ok(match result {
+        Value::Array(edits) => edits,
+        Value::Null => vec![],
+        _ => vec![],
+    })
+}

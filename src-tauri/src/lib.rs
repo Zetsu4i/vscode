@@ -67,6 +67,7 @@ pub fn run() {
             lsp::lsp_did_save,
             lsp::lsp_completion,
             lsp::lsp_hover,
+            lsp::lsp_format,
             // extensions
             ext::list_extensions,
             // config (settings.json / keybindings.json / session state)

@@ -1,6 +1,26 @@
 import { create } from "zustand";
 import { ipc } from "../ipc";
 import { baseName } from "../util/paths";
+import { useSettingsStore } from "./settingsStore";
+
+// ---- auto-save (files.autoSave = afterDelay) ---------------------------------
+
+/** path -> pending timer; reset on every keystroke (VSCode afterDelay). */
+const autoSaveTimers = new Map<string, number>();
+
+function scheduleAutoSave(path: string): void {
+  const st = useSettingsStore.getState();
+  if (st.autoSave !== "afterDelay") return;
+  const prev = autoSaveTimers.get(path);
+  if (prev !== undefined) window.clearTimeout(prev);
+  const delaySec = Math.max(1, st.autoSaveDelay);
+  const timer = window.setTimeout(() => {
+    autoSaveTimers.delete(path);
+    const buf = useEditorStore.getState().buffers[path];
+    if (buf?.dirty) void useEditorStore.getState().save(path);
+  }, delaySec * 1000);
+  autoSaveTimers.set(path, timer);
+}
 
 export type TabKind = "file" | "diff" | "settings" | "keybindings";
 
@@ -320,6 +340,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         },
       };
     });
+    scheduleAutoSave(path);
   },
 
   markSaved: (path) => {
@@ -342,7 +363,38 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     const buf = s.buffers[target];
     if (!buf) return false;
     try {
-      await ipc.writeFile(target, buf.text);
+      let textToWrite = buf.text;
+      // Format-on-save via the language server when one is running.
+      if (useSettingsStore.getState().formatOnSave) {
+        const { languageForPath } = await import("../util/paths");
+        const lang = languageForPath(target);
+        const { useUiStore } = await import("./uiStore");
+        if (
+          lang &&
+          useUiStore.getState().lspStatuses[lang] === "running"
+        ) {
+          try {
+            const edits = await ipc.lspFormat(lang, target, useSettingsStore.getState().tabSize);
+            if (edits.length > 0) {
+              const { applyTextEdits } = await import("../util/applyEdits");
+              textToWrite = applyTextEdits(textToWrite, edits);
+              set((st) => ({
+                buffers: {
+                  ...st.buffers,
+                  [target]: {
+                    ...st.buffers[target],
+                    text: textToWrite,
+                    version: st.buffers[target].version + 1,
+                  },
+                },
+              }));
+            }
+          } catch {
+            /* formatting is best-effort — save unformatted */
+          }
+        }
+      }
+      await ipc.writeFile(target, textToWrite);
       get().markSaved(target);
       // Notify the language server the document was saved.
       const { languageForPath } = await import("../util/paths");

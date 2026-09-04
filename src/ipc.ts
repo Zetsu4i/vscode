@@ -77,6 +77,15 @@ export interface LspDiagnostic {
   source?: string;
 }
 
+/** LSP TextEdit from textDocument/formatting. */
+export interface LspTextEdit {
+  range: {
+    start: { line: number; character: number };
+    end: { line: number; character: number };
+  };
+  newText: string;
+}
+
 /** LSP TextDocumentContentChangeEvent — range omitted = full replace. */
 export interface LspContentChange {
   range?: {
@@ -194,6 +203,8 @@ export const ipc = {
     }),
   lspHover: (language: string, path: string, line: number, character: number) =>
     invoke<unknown>("lsp_hover", { language, path, line, character }),
+  lspFormat: (language: string, path: string, tabSize: number) =>
+    invoke<LspTextEdit[]>("lsp_format", { language, path, tabSize }),
 
   // extensions
   listExtensions: (root?: string) =>
