@@ -1,7 +1,7 @@
 import { open } from "@tauri-apps/plugin-dialog";
 import { useUiStore } from "./state/uiStore";
 import { useWorkspaceStore } from "./state/workspaceStore";
-import { useEditorStore } from "./state/editorStore";
+import { useEditorStore, selectActiveKey } from "./state/editorStore";
 import { useTerminalStore } from "./state/terminalStore";
 import { useSearchStore } from "./state/searchStore";
 
@@ -47,7 +47,54 @@ export const commands: Command[] = [
     keybinding: "Ctrl+W",
     run: () => {
       const s = useEditorStore.getState();
-      if (s.activeKey) s.closeTab(s.activeKey);
+      const key = selectActiveKey(s);
+      if (key) s.closeTab(key);
+    },
+  },
+  {
+    id: "workbench.action.splitEditor",
+    title: "Split Editor Right",
+    category: "View",
+    keybinding: "Ctrl+\\",
+    run: () => useEditorStore.getState().splitGroup("right"),
+  },
+  {
+    id: "workbench.action.splitEditorDown",
+    title: "Split Editor Down",
+    category: "View",
+    run: () => useEditorStore.getState().splitGroup("down"),
+  },
+  {
+    id: "workbench.action.closeGroup",
+    title: "Close Editor Group",
+    category: "View",
+    run: () => {
+      const s = useEditorStore.getState();
+      s.closeGroup(s.activeGroupId);
+    },
+  },
+  {
+    id: "workbench.action.focusNextGroup",
+    title: "Focus Next Editor Group",
+    category: "View",
+    run: () => {
+      const s = useEditorStore.getState();
+      const idx = s.groups.findIndex((g) => g.id === s.activeGroupId);
+      const next = s.groups[(idx + 1) % s.groups.length];
+      if (next) s.focusGroup(next.id);
+    },
+  },
+  {
+    id: "workbench.action.moveEditorToNextGroup",
+    title: "Move Editor into Next Group",
+    category: "View",
+    run: () => {
+      const s = useEditorStore.getState();
+      const key = selectActiveKey(s);
+      if (!key) return;
+      const idx = s.groups.findIndex((g) => g.id === s.activeGroupId);
+      const next = s.groups[(idx + 1) % s.groups.length];
+      if (next) s.moveTabToGroup(key, s.activeGroupId, next.id);
     },
   },
   {

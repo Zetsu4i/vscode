@@ -1,19 +1,68 @@
-import { useEditorStore, tabLabel } from "../../state/editorStore";
+import { useState } from "react";
+import { useEditorStore, tabLabel, EditorGroup } from "../../state/editorStore";
 import { languageForPath } from "../../util/paths";
 
-export default function TabBar() {
-  const tabs = useEditorStore((s) => s.tabs);
-  const activeKey = useEditorStore((s) => s.activeKey);
+interface DragPayload {
+  key: string;
+  groupId: number;
+}
+
+export default function TabBar({ groupId }: { groupId: number }) {
+  const group = useEditorStore((s) => s.groups.find((g) => g.id === groupId));
+  const focusGroup = useEditorStore((s) => s.focusGroup);
   const setActive = useEditorStore((s) => s.setActive);
   const closeTab = useEditorStore((s) => s.closeTab);
+  const reorderTab = useEditorStore((s) => s.reorderTab);
+  const moveTabToGroup = useEditorStore((s) => s.moveTabToGroup);
   const buffers = useEditorStore((s) => s.buffers);
+  const isActiveGroup = useEditorStore((s) => s.activeGroupId === groupId);
+  const [dropIndex, setDropIndex] = useState<number | null>(null);
+  const [isBarTarget, setIsBarTarget] = useState(false);
 
-  if (tabs.length === 0) return null;
+  if (!group || group.tabs.length === 0) return null;
+  const g: EditorGroup = group;
+
+  const readPayload = (e: React.DragEvent): DragPayload | null => {
+    const raw = e.dataTransfer.getData("application/vstauri-tab");
+    if (!raw) return null;
+    try {
+      return JSON.parse(raw) as DragPayload;
+    } catch {
+      return null;
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent, index: number | null) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDropIndex(null);
+    setIsBarTarget(false);
+    const payload = readPayload(e);
+    if (!payload) return;
+    if (payload.groupId === groupId) {
+      const from = g.tabs.findIndex((t) => t.key === payload.key);
+      if (from < 0) return;
+      const to = index === null ? g.tabs.length - 1 : index > from ? index - 1 : index;
+      if (to !== from) reorderTab(groupId, from, to);
+    } else {
+      moveTabToGroup(payload.key, payload.groupId, groupId, index ?? undefined);
+    }
+  };
 
   return (
-    <div className="tabbar">
-      {tabs.map((tab) => {
-        const isActive = tab.key === activeKey;
+    <div
+      className={`tabbar ${isActiveGroup ? "active-tabbar" : ""} ${isBarTarget ? "drop-target" : ""}`}
+      onDragOver={(e) => {
+        if (e.dataTransfer.types.includes("application/vstauri-tab")) {
+          e.preventDefault();
+          setIsBarTarget(true);
+        }
+      }}
+      onDragLeave={() => setIsBarTarget(false)}
+      onDrop={(e) => handleDrop(e, null)}
+    >
+      {g.tabs.map((tab, i) => {
+        const isActive = tab.key === g.activeKey;
         const buf = tab.kind === "file" ? buffers[tab.path] : null;
         const lang = languageForPath(tab.path);
         const iconClass =
@@ -25,14 +74,34 @@ export default function TabBar() {
         return (
           <div
             key={tab.key}
-            className={`tab ${isActive ? "active" : ""}`}
-            onClick={() => setActive(tab.key)}
+            className={`tab ${isActive ? "active" : ""} ${dropIndex === i ? "drop-before" : ""}`}
+            onClick={() => {
+              focusGroup(groupId);
+              setActive(tab.key);
+            }}
             onMouseDown={(e) => {
               if (e.button === 1) {
                 e.preventDefault();
                 closeTab(tab.key);
               }
             }}
+            draggable
+            onDragStart={(e) => {
+              e.dataTransfer.setData(
+                "application/vstauri-tab",
+                JSON.stringify({ key: tab.key, groupId } satisfies DragPayload)
+              );
+              e.dataTransfer.effectAllowed = "move";
+            }}
+            onDragOver={(e) => {
+              if (e.dataTransfer.types.includes("application/vstauri-tab")) {
+                e.preventDefault();
+                e.stopPropagation();
+                setDropIndex(i);
+                setIsBarTarget(false);
+              }
+            }}
+            onDrop={(e) => handleDrop(e, i)}
             title={tab.path}
           >
             <i className={`codicon ${iconClass} tab-icon`} />

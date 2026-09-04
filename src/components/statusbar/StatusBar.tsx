@@ -1,6 +1,6 @@
 import { useUiStore } from "../../state/uiStore";
 import { useGitStore } from "../../state/gitStore";
-import { useEditorStore } from "../../state/editorStore";
+import { useEditorStore, selectActiveKey } from "../../state/editorStore";
 import { useWorkspaceStore } from "../../state/workspaceStore";
 import { languageForPath, baseName } from "../../util/paths";
 
@@ -12,7 +12,7 @@ export default function StatusBar() {
   const repo = useGitStore((s) => s.repo);
   const changes = useGitStore((s) => s.changes);
   const refreshGit = useGitStore((s) => s.refresh);
-  const activeKey = useEditorStore((s) => s.activeKey);
+  const activeKey = useEditorStore(selectActiveKey);
   const buffers = useEditorStore((s) => s.buffers);
   const problems = useEditorStore((s) => s.problems);
   const root = useWorkspaceStore((s) => s.root);

@@ -3,7 +3,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useKeybindings } from "./hooks/useKeybindings";
 import { useUiStore } from "./state/uiStore";
 import { useWorkspaceStore } from "./state/workspaceStore";
-import { useEditorStore } from "./state/editorStore";
+import { useEditorStore, selectActiveTab } from "./state/editorStore";
 import { useTerminalStore } from "./state/terminalStore";
 import { useSearchStore } from "./state/searchStore";
 import { onFsChanged, onSearchProgress, onSearchDone } from "./ipc";
@@ -44,7 +44,7 @@ export default function App() {
   useEffect(() => {
     const unsub = useEditorStore.subscribe((state) => {
       const rootName = useWorkspaceStore.getState().rootName;
-      const active = state.tabs.find((t) => t.key === state.activeKey);
+      const active = selectActiveTab(state);
       const parts: string[] = [];
       if (active) parts.push(baseName(active.path));
       if (rootName) parts.push(rootName);

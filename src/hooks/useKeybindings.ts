@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useUiStore } from "../state/uiStore";
-import { useEditorStore } from "../state/editorStore";
+import { useEditorStore, selectActiveKey } from "../state/editorStore";
 import { useTerminalStore } from "../state/terminalStore";
 import { useWorkspaceStore } from "../state/workspaceStore";
 import { runCommand } from "../commands";
@@ -94,7 +94,14 @@ export function useKeybindings(): void {
           if (!isTextInput(e.target)) {
             e.preventDefault();
             const s = useEditorStore.getState();
-            if (s.activeKey) s.closeTab(s.activeKey);
+            const key = selectActiveKey(s);
+            if (key) s.closeTab(key);
+          }
+          break;
+        case "\\":
+          if (!isTextInput(e.target)) {
+            e.preventDefault();
+            useEditorStore.getState().splitGroup("right");
           }
           break;
         case "n":

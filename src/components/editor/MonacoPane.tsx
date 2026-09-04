@@ -6,11 +6,12 @@ import { useUiStore } from "../../state/uiStore";
 import { useWorkspaceStore } from "../../state/workspaceStore";
 import { languageForPath } from "../../util/paths";
 
-// ---- module-level singletons ----------------------------------------------
+// ---- module-level singletons (shared across editor groups) -----------------
 
-let editor: monaco.editor.IStandaloneCodeEditor | null = null;
 const models = new Map<string, monaco.editor.ITextModel>();
 const viewStates = new Map<string, monaco.editor.ICodeEditorViewState | null>();
+const hookedModels = new WeakSet<monaco.editor.ITextModel>();
+const lspOpened = new Set<string>();
 let providersRegistered = false;
 let diagnosticsListenerBound = false;
 
@@ -193,12 +194,51 @@ function applyDiagnostics(payload: {
   useEditorStore.getState().setProblems(problems);
 }
 
+/**
+ * Attach store-sync + LSP hooks exactly once per model, so multiple editor
+ * groups viewing the same file never double-fire events.
+ */
+function attachModelHooks(model: monaco.editor.ITextModel, path: string): void {
+  if (hookedModels.has(model)) return;
+  hookedModels.add(model);
+
+  model.onDidChangeContent(() => {
+    const text = model.getValue();
+    useEditorStore.getState().setText(path, text);
+    const b = useEditorStore.getState().buffers[path];
+    const root = useWorkspaceStore.getState().root;
+    const langId = languageForPath(path);
+    if (b && root && langId) {
+      // Debounced full-text didChange (incremental sync lands with Phase 1 LSP work)
+      window.clearTimeout(
+        (model as unknown as { _lspTimer?: number })._lspTimer
+      );
+      (model as unknown as { _lspTimer?: number })._lspTimer = window.setTimeout(
+        () => {
+          void ipc
+            .lspDidChange(langId, path, b.text, b.version)
+            .catch(() => {});
+        },
+        400
+      );
+    }
+  });
+
+  model.onWillDispose(() => {
+    models.delete(path);
+    lspOpened.delete(path);
+    window.clearTimeout(
+      (model as unknown as { _lspTimer?: number })._lspTimer
+    );
+  });
+}
+
 function getModel(path: string, text: string, lang: string): monaco.editor.ITextModel {
   let model = models.get(path);
   if (!model) {
     model = monaco.editor.createModel(text, lang, monaco.Uri.file(path));
     models.set(path, model);
-    model.onWillDispose(() => models.delete(path));
+    attachModelHooks(model, path);
   }
   return model;
 }
@@ -215,24 +255,32 @@ async function ensureLspFor(path: string, text: string): Promise<void> {
       await ipc.lspStart(root, lang);
       ui.setLspStatus(lang, "running");
     }
-    await ipc.lspDidOpen(lang, path, text, 1);
+    if (!lspOpened.has(path)) {
+      lspOpened.add(path);
+      await ipc.lspDidOpen(lang, path, text, 1);
+    }
   } catch {
     ui.setLspStatus(lang, "unavailable");
   }
 }
 
-// ---- component -------------------------------------------------------------
+// ---- component (one instance per editor group) -------------------------------
 
 export default function MonacoPane({ path }: { path: string }) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const switching = useRef(false);
-  const setActiveTabPath = path;
 
   useEffect(() => {
     registerProviders();
 
-    if (!editor && containerRef.current) {
-      editor = monaco.editor.create(containerRef.current, {
+    if (!diagnosticsListenerBound) {
+      diagnosticsListenerBound = true;
+      onLspDiagnostics(applyDiagnostics);
+    }
+
+    if (!editorRef.current && containerRef.current) {
+      const ed = monaco.editor.create(containerRef.current, {
         model: null,
         theme: "dark-plus",
         automaticLayout: true,
@@ -253,32 +301,41 @@ export default function MonacoPane({ path }: { path: string }) {
         lineNumbersMinChars: 4,
         padding: { top: 8 },
       });
+      editorRef.current = ed;
 
-      editor.onDidChangeCursorPosition((e) => {
-        useUiStore
-          .getState()
-          .setCursor(e.position.lineNumber, e.position.column);
+      ed.onDidChangeCursorPosition((e) => {
+        // Only the focused group updates the status bar cursor readout.
+        if (ed.hasTextFocus()) {
+          useUiStore
+            .getState()
+            .setCursor(e.position.lineNumber, e.position.column);
+        }
+      });
+
+      ed.onDidBlurEditorText(() => {
+        const model = ed.getModel();
+        if (model) {
+          viewStates.set(uriToPath(model.uri.toString()), ed.saveViewState());
+        }
       });
     }
 
-    if (!diagnosticsListenerBound) {
-      diagnosticsListenerBound = true;
-      onLspDiagnostics(applyDiagnostics);
-    }
-
     return () => {
-      if (editor) {
-        if (editor.getModel()) {
-          const p = uriToPath(editor.getModel()!.uri.toString());
-          viewStates.set(p, editor.saveViewState());
+      const ed = editorRef.current;
+      if (ed) {
+        const model = ed.getModel();
+        if (model) {
+          viewStates.set(uriToPath(model.uri.toString()), ed.saveViewState());
         }
+        ed.dispose();
+        editorRef.current = null;
       }
     };
   }, []);
 
-  // Switch models when the active file changes
+  // Switch models when this group's active file changes
   useEffect(() => {
-    const ed = editor;
+    const ed = editorRef.current;
     if (!ed || !containerRef.current) return;
     const buf = useEditorStore.getState().buffers[path];
     if (!buf) return;
@@ -287,57 +344,37 @@ export default function MonacoPane({ path }: { path: string }) {
     const model = getModel(path, buf.text, lang);
     switching.current = true;
 
-    const current = ed.getModel();
-    if (current && current !== model) {
-      const p = uriToPath(current.uri.toString());
-      viewStates.set(p, ed.saveViewState());
-    }
     ed.setModel(model);
     const vs = viewStates.get(path);
     if (vs) ed.restoreViewState(vs);
     ed.focus();
 
-    // LSP: open document (only once per open — didOpen with version 1)
-    const isFirstOpen = buf.version === 1;
-    if (isFirstOpen) {
+    // LSP: open document once per model lifetime
+    if (buf.version === 1 && !lspOpened.has(path)) {
       void ensureLspFor(path, buf.text);
     }
-
-    // Content change listener (attached once per model creation path)
-    const disp = model.onDidChangeContent(() => {
-      if (switching.current) return;
-      const text = model.getValue();
-      useEditorStore.getState().setText(path, text);
-      const b = useEditorStore.getState().buffers[path];
-      if (b) {
-        const root = useWorkspaceStore.getState().root;
-        const langId = languageForPath(path);
-        if (root && langId) {
-          // Debounced didChange
-          window.clearTimeout(
-            (model as unknown as { _lspTimer?: number })._lspTimer
-          );
-          (model as unknown as { _lspTimer?: number })._lspTimer =
-            window.setTimeout(() => {
-              void ipc
-                .lspDidChange(langId, path, b.text, b.version)
-                .catch(() => {});
-            }, 400);
-        }
-      }
-    });
     switching.current = false;
-
-    return () => disp.dispose();
   }, [path]);
 
-  // Ctrl+S handled globally; keep buffer in sync after save
+  // Buffer reload after external events (save-all, replace-all, revert)
   useEffect(() => {
     const unsub = useEditorStore.subscribe((state, prev) => {
       const b = state.buffers[path];
       const pb = prev?.buffers?.[path];
-      if (b && pb && pb.dirty && !b.dirty && editor?.getModel()) {
-        // saved — LSP didSave will be added in Phase 2
+      const ed = editorRef.current;
+      if (!b || !pb || !ed) return;
+      const model = ed.getModel();
+      if (!model || uriToPath(model.uri.toString()) !== path) return;
+      // Push store text into the model only when the change did not originate
+      // from this model itself (model.getValue() already matches in that case).
+      if (b.text !== model.getValue()) {
+        switching.current = true;
+        model.pushEditOperations(
+          [],
+          [{ range: model.getFullModelRange(), text: b.text }],
+          () => null
+        );
+        switching.current = false;
       }
     });
     return () => unsub();
@@ -347,14 +384,18 @@ export default function MonacoPane({ path }: { path: string }) {
   useEffect(() => {
     const unsub = useUiStore.subscribe((state) => {
       const r = state.reveal;
-      if (r && r.path === setActiveTabPath && editor) {
-        editor.revealLineInCenter(r.line);
-        editor.setPosition({ lineNumber: r.line, column: r.col });
-        editor.focus();
+      const ed = editorRef.current;
+      if (r && ed && r.path === path) {
+        const model = ed.getModel();
+        if (model && uriToPath(model.uri.toString()) === path) {
+          ed.revealLineInCenter(r.line);
+          ed.setPosition({ lineNumber: r.line, column: r.col });
+          ed.focus();
+        }
       }
     });
     return () => unsub();
-  }, [setActiveTabPath]);
+  }, [path]);
 
   const buf = useEditorStore((s) => s.buffers[path]);
 

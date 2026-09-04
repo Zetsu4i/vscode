@@ -1,6 +1,6 @@
 import { FileEntry } from "../../ipc";
 import { useWorkspaceStore } from "../../state/workspaceStore";
-import { useEditorStore } from "../../state/editorStore";
+import { useEditorStore, selectActiveKey } from "../../state/editorStore";
 import { joinPath } from "../../util/paths";
 import { MenuItem } from "../../state/uiStore";
 
@@ -14,7 +14,7 @@ export default function FileTree({ entry, depth, onEntryMenu }: Props) {
   const expanded = useWorkspaceStore((s) => s.expanded[entry.path] ?? false);
   const tree = useWorkspaceStore((s) => s.tree);
   const toggleDir = useWorkspaceStore((s) => s.toggleDir);
-  const activeKey = useEditorStore((s) => s.activeKey);
+  const activeKey = useEditorStore(selectActiveKey);
   const openFile = useEditorStore((s) => s.openFile);
   const dirty = useEditorStore((s) => s.buffers[entry.path]?.dirty ?? false);
 

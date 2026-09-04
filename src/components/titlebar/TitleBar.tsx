@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useUiStore } from "../../state/uiStore";
 import { useWorkspaceStore } from "../../state/workspaceStore";
-import { useEditorStore } from "../../state/editorStore";
+import { useEditorStore, selectActiveKey } from "../../state/editorStore";
 import { pickAndOpenFolder } from "../../commands";
 
 interface MenuDef {
@@ -16,7 +16,7 @@ export default function TitleBar() {
   const barRef = useRef<HTMLDivElement>(null);
   const root = useWorkspaceStore((s) => s.root);
   const rootName = useWorkspaceStore((s) => s.rootName);
-  const activeKey = useEditorStore((s) => s.activeKey);
+  const activeKey = useEditorStore(selectActiveKey);
   const showConfirm = useUiStore((s) => s.showConfirm);
 
   useEffect(() => {

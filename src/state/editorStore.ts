@@ -10,6 +10,27 @@ export interface OpenTab {
   path: string;
 }
 
+/** One editor group: an independent tab strip + one visible editor. */
+export interface EditorGroup {
+  id: number;
+  tabs: OpenTab[];
+  activeKey: string | null;
+}
+
+/**
+ * Workbench grid. A leaf hosts one editor group; a split lays its children
+ * out along an axis with flexible size weights (percentages).
+ */
+export type LayoutNode =
+  | { kind: "leaf"; groupId: number }
+  | {
+      kind: "split";
+      id: number;
+      dir: "row" | "column"; // row = side by side, column = stacked
+      children: LayoutNode[];
+      sizes: number[];
+    };
+
 export interface FileBuf {
   text: string;
   savedText: string;
@@ -31,8 +52,11 @@ export interface Problem {
 }
 
 interface EditorState {
-  tabs: OpenTab[];
-  activeKey: string | null;
+  groups: EditorGroup[];
+  activeGroupId: number;
+  layout: LayoutNode;
+  nextGroupId: number;
+  nextSplitId: number;
   buffers: Record<string, FileBuf>;
   problems: Problem[];
   /** head (committed) content cache for diff tabs */
@@ -50,6 +74,79 @@ interface EditorState {
   handleRename: (oldPath: string, newPath: string) => void;
   handleDelete: (path: string) => void;
   setProblems: (p: Problem[]) => void;
+
+  focusGroup: (groupId: number) => void;
+  splitGroup: (dir: "right" | "down") => void;
+  closeGroup: (groupId: number) => void;
+  reorderTab: (groupId: number, from: number, to: number) => void;
+  moveTabToGroup: (key: string, fromGroupId: number, toGroupId: number, index?: number) => void;
+  resizeSplit: (splitId: number, index: number, deltaPx: number, containerPx: number) => void;
+}
+
+// ---- layout tree helpers (pure) --------------------------------------------
+
+function replaceLeaf(node: LayoutNode, groupId: number, fn: (leaf: LayoutNode) => LayoutNode): LayoutNode {
+  if (node.kind === "leaf") {
+    return node.groupId === groupId ? fn(node) : node;
+  }
+  return {
+    ...node,
+    children: node.children.map((c) => replaceLeaf(c, groupId, fn)),
+  };
+}
+
+/** Remove a group's leaf; collapse single-child splits. Returns null if the whole subtree is gone. */
+function removeLeaf(node: LayoutNode, groupId: number): LayoutNode | null {
+  if (node.kind === "leaf") return node.groupId === groupId ? null : node;
+  const children: LayoutNode[] = [];
+  const sizes: number[] = [];
+  node.children.forEach((c, i) => {
+    const kept = removeLeaf(c, groupId);
+    if (kept) {
+      children.push(kept);
+      sizes.push(node.sizes[i]);
+    }
+  });
+  if (children.length === 0) return null;
+  if (children.length === 1) return children[0];
+  return { ...node, children, sizes: normalize(sizes) };
+}
+
+function mapSplits(node: LayoutNode, fn: (s: Extract<LayoutNode, { kind: "split" }>) => LayoutNode): LayoutNode {
+  if (node.kind === "leaf") return node;
+  const mapped = fn(node);
+  if (mapped.kind !== "split") return mapped;
+  return {
+    ...mapped,
+    children: mapped.children.map((c) => mapSplits(c, fn)),
+  };
+}
+
+function normalize(sizes: number[]): number[] {
+  const total = sizes.reduce((a, b) => a + b, 0);
+  if (total <= 0) return sizes.map(() => 100 / Math.max(1, sizes.length));
+  return sizes;
+}
+
+function collectGroupIds(node: LayoutNode): number[] {
+  if (node.kind === "leaf") return [node.groupId];
+  return node.children.flatMap(collectGroupIds);
+}
+
+// ---- selectors --------------------------------------------------------------
+
+export function selectActiveGroup(s: EditorState): EditorGroup | undefined {
+  return s.groups.find((g) => g.id === s.activeGroupId);
+}
+
+export function selectActiveKey(s: EditorState): string | null {
+  return selectActiveGroup(s)?.activeKey ?? null;
+}
+
+export function selectActiveTab(s: EditorState): OpenTab | null {
+  const key = selectActiveKey(s);
+  if (!key) return null;
+  return selectActiveGroup(s)?.tabs.find((t) => t.key === key) ?? null;
 }
 
 function tabKey(path: string): string {
@@ -57,24 +154,32 @@ function tabKey(path: string): string {
 }
 
 export const useEditorStore = create<EditorState>((set, get) => ({
-  tabs: [],
-  activeKey: null,
+  groups: [{ id: 0, tabs: [], activeKey: null }],
+  activeGroupId: 0,
+  layout: { kind: "leaf", groupId: 0 },
+  nextGroupId: 1,
+  nextSplitId: 1,
   buffers: {},
   problems: [],
   diffBase: {},
 
   openFile: async (path) => {
     const key = tabKey(path);
-    const existing = get().tabs.find((t) => t.key === key);
-    if (existing) {
-      set({ activeKey: key });
+    const s = get();
+    // Already open somewhere? Focus that group + tab.
+    const owner = s.groups.find((g) => g.tabs.some((t) => t.key === key));
+    if (owner) {
+      set((st) => ({
+        activeGroupId: owner.id,
+        groups: st.groups.map((g) => (g.id === owner.id ? { ...g, activeKey: key } : g)),
+      }));
       return;
     }
     try {
       const fc = await ipc.readFile(path);
-      set((s) => ({
+      set((st) => ({
         buffers: {
-          ...s.buffers,
+          ...st.buffers,
           [path]: {
             text: fc.content,
             savedText: fc.content,
@@ -84,8 +189,11 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             version: 1,
           },
         },
-        tabs: [...s.tabs, { key, kind: "file", path }],
-        activeKey: key,
+        groups: st.groups.map((g) =>
+          g.id === st.activeGroupId
+            ? { ...g, tabs: [...g.tabs, { key, kind: "file" as TabKind, path }], activeKey: key }
+            : g
+        ),
       }));
     } catch (e) {
       console.error("open failed", e);
@@ -94,9 +202,13 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
   openDiff: async (path) => {
     const key = `diff:${path}`;
-    const existing = get().tabs.find((t) => t.key === key);
-    if (existing) {
-      set({ activeKey: key });
+    const s = get();
+    const owner = s.groups.find((g) => g.tabs.some((t) => t.key === key));
+    if (owner) {
+      set((st) => ({
+        activeGroupId: owner.id,
+        groups: st.groups.map((g) => (g.id === owner.id ? { ...g, activeKey: key } : g)),
+      }));
       return;
     }
     const { useWorkspaceStore } = await import("./workspaceStore");
@@ -104,10 +216,13 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     if (!root) return;
     try {
       const base = await ipc.gitShowHead(root, path);
-      set((s) => ({
-        diffBase: { ...s.diffBase, [path]: base },
-        tabs: [...s.tabs, { key, kind: "diff", path }],
-        activeKey: key,
+      set((st) => ({
+        diffBase: { ...st.diffBase, [path]: base },
+        groups: st.groups.map((g) =>
+          g.id === st.activeGroupId
+            ? { ...g, tabs: [...g.tabs, { key, kind: "diff" as TabKind, path }], activeKey: key }
+            : g
+        ),
       }));
     } catch (e) {
       console.error("diff open failed", e);
@@ -116,20 +231,47 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
   closeTab: (key) => {
     set((s) => {
-      const tabs = s.tabs.filter((t) => t.key !== key);
-      const activeKey =
-        s.activeKey === key
-          ? (tabs.length > 0
-              ? tabs[Math.max(0, s.tabs.findIndex((t) => t.key === key) - 1)].key
-              : null)
-          : s.activeKey;
-      return { tabs, activeKey };
+      const owner = s.groups.find((g) => g.tabs.some((t) => t.key === key));
+      if (!owner) return s;
+      const idx = owner.tabs.findIndex((t) => t.key === key);
+      const tabs = owner.tabs.filter((t) => t.key !== key);
+      let groups: EditorGroup[];
+      let layout = s.layout;
+      let activeGroupId = s.activeGroupId;
+
+      if (tabs.length === 0 && s.groups.length > 1) {
+        // Group becomes empty → remove the group and collapse the grid.
+        groups = s.groups.filter((g) => g.id !== owner.id);
+        const removed = removeLeaf(s.layout, owner.id);
+        if (removed) layout = removed;
+        if (activeGroupId === owner.id) {
+          activeGroupId = groups[groups.length - 1].id;
+        }
+      } else {
+        const activeKey =
+          owner.activeKey === key
+            ? tabs[Math.min(idx, tabs.length - 1)]?.key ?? null
+            : owner.activeKey;
+        groups = s.groups.map((g) => (g.id === owner.id ? { ...g, tabs, activeKey } : g));
+      }
+      return { groups, layout, activeGroupId };
     });
   },
 
-  closeAll: () => set({ tabs: [], activeKey: null }),
+  closeAll: () =>
+    set((s) => ({
+      groups: s.groups.map((g) => (g.id === 0 ? g : { ...g, tabs: [], activeKey: null })),
+    })),
 
-  setActive: (key) => set({ activeKey: key }),
+  setActive: (key) =>
+    set((s) => {
+      const owner = s.groups.find((g) => g.tabs.some((t) => t.key === key));
+      if (!owner) return s;
+      return {
+        activeGroupId: owner.id,
+        groups: s.groups.map((g) => (g.id === owner.id ? { ...g, activeKey: key } : g)),
+      };
+    }),
 
   setText: (path, text) => {
     set((s) => {
@@ -159,7 +301,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
   save: async (path) => {
     const s = get();
-    const target = path ?? (s.activeKey?.startsWith("diff:") ? null : s.activeKey);
+    const target = path ?? selectActiveKey(s);
     if (!target) return false;
     const buf = s.buffers[target];
     if (!buf) return false;
@@ -193,34 +335,151 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         diffBase[newPath] = diffBase[oldPath];
         delete diffBase[oldPath];
       }
-      const tabs = s.tabs.map((t) => {
+      const remap = (t: OpenTab): OpenTab => {
         if (t.key === oldPath) return { ...t, key: newPath, path: newPath };
-        if (t.key === `diff:${oldPath}`)
-          return { ...t, key: `diff:${newPath}`, path: newPath };
+        if (t.key === `diff:${oldPath}`) return { ...t, key: `diff:${newPath}`, path: newPath };
         return t;
+      };
+      const groups = s.groups.map((g) => {
+        const tabs = g.tabs.map(remap);
+        const activeKey =
+          g.activeKey === oldPath
+            ? newPath
+            : g.activeKey === `diff:${oldPath}`
+              ? `diff:${newPath}`
+              : g.activeKey;
+        return { ...g, tabs, activeKey };
       });
-      const activeKey =
-        s.activeKey === oldPath
-          ? newPath
-          : s.activeKey === `diff:${oldPath}`
-            ? `diff:${newPath}`
-            : s.activeKey;
-      return { buffers, diffBase, tabs, activeKey };
+      return { buffers, diffBase, groups };
     });
   },
 
   handleDelete: (path) => {
-    set((s) => ({
-      tabs: s.tabs.filter(
-        (t) => t.path !== path && !(t.path.startsWith(path + "/") || t.path.startsWith(path + "\\"))
-      ),
-      activeKey: s.tabs.find((t) => t.key === s.activeKey && t.path !== path)
-        ? s.activeKey
-        : null,
-    }));
+    set((s) => {
+      const groups = s.groups.map((g) => {
+        const tabs = g.tabs.filter(
+          (t) => t.path !== path && !t.path.startsWith(path + "/") && !t.path.startsWith(path + "\\")
+        );
+        const activeKey = tabs.some((t) => t.key === g.activeKey) ? g.activeKey : tabs[tabs.length - 1]?.key ?? null;
+        return { ...g, tabs, activeKey };
+      });
+      return { groups };
+    });
   },
 
   setProblems: (p) => set({ problems: p }),
+
+  focusGroup: (groupId) =>
+    set((s) => (s.activeGroupId === groupId ? s : { activeGroupId: groupId })),
+
+  splitGroup: (dir) => {
+    const s = get();
+    const source = selectActiveGroup(s);
+    if (!source) return;
+    const newId = s.nextGroupId;
+    const splitId = s.nextSplitId;
+    // VSCode behavior: the new group opens with a copy of the active editor.
+    const carried = source.activeKey
+      ? source.tabs.filter((t) => t.key === source.activeKey)
+      : [];
+    const newGroup: EditorGroup = {
+      id: newId,
+      tabs: carried.map((t) => ({ ...t })),
+      activeKey: carried[0]?.key ?? null,
+    };
+    const newLeaf: LayoutNode = { kind: "leaf", groupId: newId };
+    const layout = replaceLeaf(s.layout, source.id, (leaf) => ({
+      kind: "split",
+      id: splitId,
+      dir: dir === "right" ? "row" : "column",
+      children: [leaf, newLeaf],
+      sizes: [50, 50],
+    }));
+    set({
+      groups: [...s.groups, newGroup],
+      layout,
+      nextGroupId: newId + 1,
+      nextSplitId: splitId + 1,
+      activeGroupId: newId,
+    });
+  },
+
+  closeGroup: (groupId) => {
+    set((s) => {
+      if (s.groups.length <= 1) {
+        // Last group: just clear its tabs.
+        return {
+          groups: s.groups.map((g) => (g.id === groupId ? { ...g, tabs: [], activeKey: null } : g)),
+        };
+      }
+      const groups = s.groups.filter((g) => g.id !== groupId);
+      const layout = removeLeaf(s.layout, groupId) ?? { kind: "leaf", groupId: groups[0].id };
+      const remaining = collectGroupIds(layout);
+      const activeGroupId = remaining.includes(s.activeGroupId)
+        ? s.activeGroupId
+        : remaining[remaining.length - 1];
+      return { groups, layout, activeGroupId };
+    });
+  },
+
+  reorderTab: (groupId, from, to) => {
+    set((s) => ({
+      groups: s.groups.map((g) => {
+        if (g.id !== groupId || from === to) return g;
+        const tabs = [...g.tabs];
+        const [moved] = tabs.splice(from, 1);
+        tabs.splice(to, 0, moved);
+        return { ...g, tabs };
+      }),
+    }));
+  },
+
+  moveTabToGroup: (key, fromGroupId, toGroupId, index) => {
+    set((s) => {
+      if (fromGroupId === toGroupId) return s;
+      const from = s.groups.find((g) => g.id === fromGroupId);
+      const to = s.groups.find((g) => g.id === toGroupId);
+      const tab = from?.tabs.find((t) => t.key === key);
+      if (!from || !to || !tab) return s;
+      let activeGroupId = s.activeGroupId;
+      const groups = s.groups.map((g) => {
+        if (g.id === fromGroupId) {
+          const tabs = g.tabs.filter((t) => t.key !== key);
+          const activeKey = g.activeKey === key ? tabs[tabs.length - 1]?.key ?? null : g.activeKey;
+          return { ...g, tabs, activeKey };
+        }
+        if (g.id === toGroupId) {
+          const tabs = [...g.tabs];
+          tabs.splice(index ?? tabs.length, 0, tab);
+          return { ...g, tabs, activeKey: tab.key };
+        }
+        return g;
+      });
+      if (toGroupId === s.activeGroupId) activeGroupId = toGroupId;
+      return { groups, activeGroupId };
+    });
+  },
+
+  resizeSplit: (splitId, index, deltaPx, containerPx) => {
+    if (containerPx <= 0) return;
+    set((s) => {
+      const layout = mapSplits(s.layout, (node) => {
+        if (node.id !== splitId) return node;
+        const sizes = [...node.sizes];
+        const total = sizes.reduce((a, b) => a + b, 0) || 100;
+        const deltaPct = (deltaPx / containerPx) * total;
+        const a = sizes[index];
+        const b = sizes[index + 1];
+        if (a === undefined || b === undefined) return node;
+        const minPct = 5;
+        const d = Math.max(-(b - minPct), Math.min(a - minPct, deltaPct));
+        sizes[index] = a + d;
+        sizes[index + 1] = b - d;
+        return { ...node, sizes };
+      });
+      return { layout };
+    });
+  },
 }));
 
 export function tabLabel(tab: OpenTab): string {
