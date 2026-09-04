@@ -5,15 +5,14 @@
 
 import { Emitter, Event } from '../../../../base/common/event.js';
 import type { PerformanceMark } from '../../../../base/common/performance.js';
-import { Registry } from '../../../../platform/registry/common/platform.js';
-import { IProcessEnvironment, OperatingSystem, TerminalExtensions } from '../../../../platform/terminal/common/terminal.js';
-import type { IPtyHostController, IPtyHostLatencyMeasurement, IProcessDetails, IProcessProperty, IShellLaunchConfig, IShellLaunchConfigDto, ITerminalBackend, ITerminalBackendRegistry, ITerminalChildProcess, ITerminalLogService, ITerminalProcessOptions, ITerminalProfile, ITerminalsLayoutInfo, ITerminalsLayoutInfoById, TitleEventSource, TerminalIcon } from '../../../../platform/terminal/common/terminal.js';
+import { ITerminalLogService } from '../../../../platform/terminal/common/terminal.js';
+import type { IPtyHostController, IPtyHostLatencyMeasurement, IProcessProperty, IShellLaunchConfig, IShellLaunchConfigDto, ITerminalBackend, ITerminalChildProcess, ITerminalProcessOptions, ITerminalProfile, ITerminalsLayoutInfo, ITerminalsLayoutInfoById, TitleEventSource, TerminalIcon } from '../../../../platform/terminal/common/terminal.js';
+import type { IProcessEnvironment, OperatingSystem } from '../../../../base/common/platform.js';
+import type { IProcessDetails } from '../../../../platform/terminal/common/terminalProcess.js';
 import { IWorkspaceContextService } from '../../../../platform/workspace/common/workspace.js';
 import { IConfigurationResolverService } from '../../../services/configurationResolver/common/configurationResolver.js';
 import { IHistoryService } from '../../../services/history/common/history.js';
 import { IStatusbarService } from '../../../services/statusbar/browser/statusbar.js';
-import { IInstantiationService } from '../../../../platform/instantiation/common/instantiation.js';
-import { ITerminalInstanceService } from '../../terminal/browser/terminal.js';
 import { BaseTerminalBackend } from '../../terminal/browser/baseTerminalBackend.js';
 import { TauriPty } from './tauriPty.js';
 import type { TauriBridge } from '../common/tauriBridge.js';

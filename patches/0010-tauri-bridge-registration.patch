@@ -7,7 +7,7 @@ index a2f09581..b1d70f2d 100644
  import { IRemoteSocketFactoryService, RemoteSocketFactoryService } from '../../platform/remote/common/remoteSocketFactoryService.js';
  import { BrowserSocketFactory } from '../../platform/remote/browser/browserSocketFactory.js';
 +// --- VSTauri bridge (added) ---
-+import { SyncDescriptor } from '../../platform/instantiation/common/syncDescriptor.js';
++import { SyncDescriptor } from '../../platform/instantiation/common/descriptors.js';
 +import { IFileDialogService } from '../../platform/dialogs/common/dialogs.js';
 +import '../contrib/tauriBridge/browser/tauri.contribution.js';
 +import { TauriBridge } from '../contrib/tauriBridge/common/tauriBridge.js';

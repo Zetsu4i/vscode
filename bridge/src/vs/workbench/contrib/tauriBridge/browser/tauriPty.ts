@@ -114,6 +114,6 @@ export class TauriPty extends BasePty implements ITerminalChildProcess {
 
 	/** Called by the backend when the backbone reports the process is ready. */
 	handleBridgeReady(pid: number, cwd: string): void {
-		this.handleReady({ pid, cwd });
+		this.handleReady({ pid, cwd, windowsPty: undefined });
 	}
 }

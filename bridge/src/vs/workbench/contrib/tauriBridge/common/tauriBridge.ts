@@ -17,7 +17,7 @@
  */
 
 import { Emitter, Event } from '../../../../base/common/event.js';
-import { Disposable, IDisposable, toDisposable } from '../../../../base/common/lifecycle.js';
+import { Disposable } from '../../../../base/common/lifecycle.js';
 
 export interface IVSTauriConfig {
 	readonly token: string;
@@ -53,9 +53,7 @@ export class TauriBridge extends Disposable {
 
 	private readonly _token: string;
 
-	private _ws: WebSocket | undefined;
-
-	private readonly _eventEmitters = new Map<string, Set<Emitter<unknown>>>();
+	private readonly _eventEmitters = new Map<string, Set<Emitter<any>>>();
 
 	private constructor(config: IVSTauriConfig) {
 		super();
@@ -90,7 +88,7 @@ export class TauriBridge extends Disposable {
 	listen<T>(event: string): Event<T> {
 		let set = this._eventEmitters.get(event);
 		if (!set) {
-			set = new Set<Emitter<unknown>>();
+			set = new Set<Emitter<any>>();
 			this._eventEmitters.set(event, set);
 		}
 		const emitter = new Emitter<T>({
@@ -101,31 +99,15 @@ export class TauriBridge extends Disposable {
 				}
 			}
 		});
-		set.add(emitter as Emitter<unknown>);
+		set.add(emitter as Emitter<any>);
 		return emitter.event;
 	}
 
-	/** Adapts an upstream Disposable to detach from an event when disposed. */
-	protected registerListener(event: string, emitter: Emitter<unknown>): IDisposable {
-		let set = this._eventEmitters.get(event);
-		if (!set) {
-			set = new Set<Emitter<unknown>>();
-			this._eventEmitters.set(event, set);
-		}
-		set.add(emitter);
-		return toDisposable(() => {
-			set!.delete(emitter);
-			if (set!.size === 0) {
-				this._eventEmitters.delete(event);
-			}
-		});
-	}
 
 	private _connectWebSocket(): void {
 		const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
 		const ws = new WebSocket(`${protocol}//${window.location.host}/bridge/ws?token=${encodeURIComponent(this._token)}`);
 		ws.binaryType = 'arraybuffer';
-		this._ws = ws;
 
 		ws.onmessage = ev => {
 			let msg: { event: string; payload: unknown };
@@ -142,7 +124,6 @@ export class TauriBridge extends Disposable {
 			}
 		};
 		ws.onclose = () => {
-			this._ws = undefined;
 			// reconnect with backoff; the backbone lifetime matches the app's
 			setTimeout(() => this._connectWebSocket(), 1000 + Math.floor(Math.random() * 2000));
 		};

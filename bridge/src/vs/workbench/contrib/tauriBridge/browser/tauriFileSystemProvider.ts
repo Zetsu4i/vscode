@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Event } from '../../../../base/common/event.js';
+import { Emitter, Event } from '../../../../base/common/event.js';
 import { Disposable, DisposableStore, IDisposable, toDisposable } from '../../../../base/common/lifecycle.js';
 import { URI } from '../../../../base/common/uri.js';
 import { FileChangeType, FileSystemProviderCapabilities, FileSystemProviderErrorCode, FilePermission, IFileChange, IFileDeleteOptions, IFileOverwriteOptions, IFileWriteOptions, IFileSystemProvider, IStat, IWatchOptions, FileType, createFileSystemProviderError } from '../../../../platform/files/common/files.js';
@@ -188,11 +188,6 @@ export class TauriFileSystemProvider extends Disposable implements IFileSystemPr
                 } catch (err) {
                         throw toProviderError(err);
                 }
-        }
-
-        open(resource: URI, _opts: IFileOpenOptions): Promise<number> {
-                // FileOpenReadWriteClose is not advertised; required only if capability set.
-                return Promise.reject(createFileSystemProviderError('open not supported', FileSystemProviderErrorCode.Unknown));
         }
 }
 
