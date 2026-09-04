@@ -35,7 +35,20 @@ Outputs: `out-vscode-web/` (bundle, gitignored) → packaged site `../vscode-web
 
 ## Rust work in the sandbox
 
-No cargo/crates.io. Rules: `AGENTS.md` §M-4 — write `rust-check: deferred (no crates.io egress)` in the commit body (max one consecutive batch) and let CI (`.github/workflows/tauri.yml`) validate. The Rust shell (`src-tauri/`) is minimal until Phase 1 Rust work begins.
+No cargo/crates.io. Rules: `AGENTS.md` §M-4 — write `rust-check: deferred (no crates.io egress)` in the commit body (max one consecutive batch) and let CI (`.github/workflows/tauri.yml`) validate.
+
+**Local rustfmt (avoids blind fmt-check failures):** npm packages from `@rustbin` ship the real binaries via the reachable npm registry:
+
+```bash
+cd /tmp/rustfmt && npm init -y >/dev/null
+npm i @rustbin/rustfmt-1.88.0-x86_64-unknown-linux-gnu @rustbin/rustc-1.88.0-x86_64-unknown-linux-gnu
+export LD_LIBRARY_PATH=$PWD/node_modules/@rustbin/rustc-1.88.0-x86_64-unknown-linux-gnu/rustc/lib
+RUSTFMT=$PWD/node_modules/@rustbin/rustfmt-1.88.0-x86_64-unknown-linux-gnu/rustfmt-preview/bin/rustfmt
+cd /home/user/vscode
+$RUSTFMT --edition 2021 --check src-tauri/src/lib.rs src-tauri/src/main.rs src-tauri/src/services/mod.rs src-tauri/src/services/files.rs src-tauri/build.rs
+```
+
+Gotcha that cost a CI round-trip: rustfmt's default **`chain_width` is 60** (not `max_width` 100) — method chains longer than 60 columns must be split across lines. Write chains pre-split. `cargo check`/clippy still run only in CI (deps need crates.io).
 
 ## What normal machines don't need
 

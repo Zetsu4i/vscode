@@ -46,7 +46,9 @@ fn file_type_of(is_symlink: bool, is_dir: bool, is_file: bool) -> u8 {
 }
 
 fn epoch_millis(time: std::io::Result<std::time::SystemTime>) -> u64 {
-    let millis = time.ok().and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok());
+    let millis = time
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok());
     match millis {
         Some(d) => d.as_millis() as u64,
         None => 0,
