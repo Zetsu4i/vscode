@@ -998,6 +998,68 @@ body.split-resizing {
   flex: 1;
   min-height: 0;
   position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.editor-pane {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+
+/* ---------- breadcrumbs ---------- */
+
+.breadcrumbs {
+  display: flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 12px;
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+  background: var(--bg-editor);
+  overflow: hidden;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.crumb-wrap {
+  display: inline-flex;
+  align-items: center;
+}
+
+.crumb {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 4px;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.crumb:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.crumb-root {
+  cursor: default;
+  color: var(--text);
+}
+
+.crumb-file {
+  color: var(--text);
+  cursor: default;
+}
+
+.crumb-icon {
+  font-size: 14px;
+  margin-right: 4px;
+}
+
+.crumb-sep {
+  font-size: 14px;
+  opacity: 0.6;
 }
 
 .monaco-container {

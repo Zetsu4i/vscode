@@ -4,6 +4,7 @@ import { ipc, onLspDiagnostics, LspDiagnostic } from "../../ipc";
 import { useEditorStore } from "../../state/editorStore";
 import { useUiStore } from "../../state/uiStore";
 import { useWorkspaceStore } from "../../state/workspaceStore";
+import { useSettingsStore } from "../../state/settingsStore";
 import { languageForPath } from "../../util/paths";
 
 // ---- module-level singletons (shared across editor groups) -----------------
@@ -309,6 +310,7 @@ export default function MonacoPane({ path }: { path: string }) {
         suggestSelection: "first",
         lineNumbersMinChars: 4,
         padding: { top: 8 },
+        stickyScroll: { enabled: useSettingsStore.getState().stickyScroll },
       });
       editorRef.current = ed;
 
@@ -405,6 +407,16 @@ export default function MonacoPane({ path }: { path: string }) {
     });
     return () => unsub();
   }, [path]);
+
+  // Editor settings reactively applied (sticky scroll, breadcrumbs affect layout only)
+  useEffect(() => {
+    const unsub = useSettingsStore.subscribe((s) => {
+      editorRef.current?.updateOptions({
+        stickyScroll: { enabled: s.stickyScroll },
+      });
+    });
+    return () => unsub();
+  }, []);
 
   const buf = useEditorStore((s) => s.buffers[path]);
 

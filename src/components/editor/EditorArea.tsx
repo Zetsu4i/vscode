@@ -4,6 +4,7 @@ import TabBar from "./TabBar";
 import MonacoPane from "./MonacoPane";
 import DiffPane from "./DiffPane";
 import Welcome from "./Welcome";
+import Breadcrumbs from "./Breadcrumbs";
 
 function Splitter({
   splitId,
@@ -116,7 +117,14 @@ function GroupPane({ groupId }: { groupId: number }) {
     >
       <TabBar groupId={groupId} />
       <div className="editor-body">
-        {active?.kind === "file" && <MonacoPane key={active.key} path={active.path} />}
+        {active?.kind === "file" && (
+          <>
+            <Breadcrumbs path={active.path} />
+            <div className="editor-pane">
+              <MonacoPane key={active.key} path={active.path} />
+            </div>
+          </>
+        )}
         {active?.kind === "diff" && <DiffPane key={active.key} path={active.path} />}
         {!active && <Welcome />}
       </div>

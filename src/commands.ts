@@ -4,6 +4,7 @@ import { useWorkspaceStore } from "./state/workspaceStore";
 import { useEditorStore, selectActiveKey } from "./state/editorStore";
 import { useTerminalStore } from "./state/terminalStore";
 import { useSearchStore } from "./state/searchStore";
+import { useSettingsStore } from "./state/settingsStore";
 
 export interface Command {
   id: string;
@@ -238,6 +239,18 @@ export const commands: Command[] = [
     title: "Git: Refresh",
     category: "Git",
     run: () => useWorkspaceStore.getState() && useUiStore.getState().setView("git"),
+  },
+  {
+    id: "workbench.action.toggleBreadcrumbs",
+    title: "Toggle Breadcrumbs",
+    category: "View",
+    run: () => useSettingsStore.getState().toggleBreadcrumbs(),
+  },
+  {
+    id: "workbench.action.toggleStickyScroll",
+    title: "Toggle Sticky Scroll",
+    category: "View",
+    run: () => useSettingsStore.getState().toggleStickyScroll(),
   },
   {
     id: "workbench.action.reloadWindow",
