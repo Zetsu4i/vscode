@@ -21,6 +21,14 @@ export function useKeybindings(): void {
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       const ctrl = e.ctrlKey || e.metaKey;
+
+      // Alt+Z toggles word wrap (VSCode default)
+      if (e.altKey && !ctrl && e.key.toLowerCase() === "z") {
+        e.preventDefault();
+        runCommand("editor.action.toggleWordWrap");
+        return;
+      }
+
       if (!ctrl) {
         if (e.key === "Escape") {
           const ui = useUiStore.getState();
@@ -109,6 +117,15 @@ export function useKeybindings(): void {
             e.preventDefault();
             runCommand("workbench.action.files.newFile");
           }
+          break;
+        case "=":
+        case "+":
+          e.preventDefault();
+          runCommand("editor.action.fontZoomIn");
+          break;
+        case "-":
+          e.preventDefault();
+          runCommand("editor.action.fontZoomOut");
           break;
         default:
           break;

@@ -294,15 +294,17 @@ export default function MonacoPane({ path }: { path: string }) {
         model: null,
         theme: "dark-plus",
         automaticLayout: true,
-        fontSize: 14,
+        fontSize: useSettingsStore.getState().fontSize,
+        fontLigatures: useSettingsStore.getState().ligatures,
         fontFamily:
           'Consolas, "Courier New", "Droid Sans Mono", monospace',
-        minimap: { enabled: true, renderCharacters: true },
+        minimap: { enabled: useSettingsStore.getState().minimap, renderCharacters: true },
+        wordWrap: useSettingsStore.getState().wordWrap ? "on" : "off",
+        tabSize: useSettingsStore.getState().tabSize,
+        renderWhitespace: useSettingsStore.getState().renderWhitespace,
         scrollBeyondLastLine: true,
         smoothScrolling: true,
         cursorBlinking: "blink",
-        tabSize: 4,
-        renderWhitespace: "selection",
         guides: { indentation: true, bracketPairs: false },
         bracketPairColorization: { enabled: true },
         wordBasedSuggestions: "currentDocument",
@@ -408,11 +410,17 @@ export default function MonacoPane({ path }: { path: string }) {
     return () => unsub();
   }, [path]);
 
-  // Editor settings reactively applied (sticky scroll, breadcrumbs affect layout only)
+  // Editor settings reactively applied
   useEffect(() => {
     const unsub = useSettingsStore.subscribe((s) => {
       editorRef.current?.updateOptions({
         stickyScroll: { enabled: s.stickyScroll },
+        fontSize: s.fontSize,
+        fontLigatures: s.ligatures,
+        minimap: { enabled: s.minimap, renderCharacters: true },
+        wordWrap: s.wordWrap ? "on" : "off",
+        tabSize: s.tabSize,
+        renderWhitespace: s.renderWhitespace,
       });
     });
     return () => unsub();
