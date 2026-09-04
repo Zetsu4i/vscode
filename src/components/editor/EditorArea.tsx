@@ -7,6 +7,7 @@ import Welcome from "./Welcome";
 import Breadcrumbs from "./Breadcrumbs";
 import HexView from "./HexView";
 import SettingsEditor from "./SettingsEditor";
+import KeybindingsEditor from "./KeybindingsEditor";
 
 function Splitter({
   splitId,
@@ -137,6 +138,7 @@ function GroupPane({ groupId }: { groupId: number }) {
         )}
         {active?.kind === "diff" && <DiffPane key={active.key} path={active.path} />}
         {active?.kind === "settings" && <SettingsEditor />}
+        {active?.kind === "keybindings" && <KeybindingsEditor />}
         {!active && <Welcome />}
       </div>
     </div>

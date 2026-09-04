@@ -108,6 +108,7 @@ export const commands: Command[] = [
     id: "workbench.action.files.newFile",
     title: "New File...",
     category: "File",
+    keybinding: "Ctrl+N",
     run: () => {
       const ws = useWorkspaceStore.getState();
       const ui = useUiStore.getState();
@@ -166,6 +167,7 @@ export const commands: Command[] = [
     id: "workbench.action.terminal.new",
     title: "Create New Terminal",
     category: "Terminal",
+    keybinding: "Ctrl+Shift+`",
     run: async () => {
       const ws = useWorkspaceStore.getState();
       await useTerminalStore.getState().create(ws.root ?? undefined);

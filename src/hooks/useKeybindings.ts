@@ -1,8 +1,6 @@
 import { useEffect } from "react";
 import { useUiStore } from "../state/uiStore";
-import { useEditorStore, selectActiveKey } from "../state/editorStore";
-import { useTerminalStore } from "../state/terminalStore";
-import { useWorkspaceStore } from "../state/workspaceStore";
+import { useKeybindingStore, resolveBindings, eventKey } from "../keybindings/store";
 import { runCommand } from "../commands";
 
 function isTextInput(target: EventTarget | null): boolean {
@@ -15,128 +13,72 @@ function isTextInput(target: EventTarget | null): boolean {
 }
 
 /**
- * Global keybinding layer — mirrors core VSCode defaults.
+ * Commands that must not fire while the user is typing in a text field
+ * (matching the narrow guards the hardcoded layer used to apply).
+ */
+const NO_TEXT_INPUT = new Set([
+  "workbench.action.closeActiveEditor",
+  "workbench.action.splitEditor",
+  "workbench.action.files.newFile",
+]);
+
+/**
+ * Global keybinding layer — fully data-driven. Defaults come from the
+ * command registry; the user's keybindings.json overrides them.
  */
 export function useKeybindings(): void {
   useEffect(() => {
+    void useKeybindingStore.getState().init();
+
     const onKeyDown = (e: KeyboardEvent) => {
       const ctrl = e.ctrlKey || e.metaKey;
 
-      // Alt+Z toggles word wrap (VSCode default)
-      if (e.altKey && !ctrl && e.key.toLowerCase() === "z") {
-        e.preventDefault();
-        runCommand("editor.action.toggleWordWrap");
-        return;
+      // Escape handling is UI-state, not a command.
+      if (e.key === "Escape") {
+        const ui = useUiStore.getState();
+        if (ui.paletteOpen) return; // palette handles its own Escape
+        if (ui.contextMenu) {
+          ui.closeContextMenu();
+          return;
+        }
+        if (ui.inputDialog || ui.confirmDialog) {
+          ui.closeInput();
+          ui.closeConfirm();
+          return;
+        }
       }
 
-      if (!ctrl) {
-        if (e.key === "Escape") {
-          const ui = useUiStore.getState();
-          if (ui.contextMenu) {
-            ui.closeContextMenu();
-            return;
-          }
-          if (ui.inputDialog || ui.confirmDialog) {
-            ui.closeInput();
-            ui.closeConfirm();
-            return;
-          }
+      const binding = eventKey(e);
+
+      // Key capture mode (Keybindings editor is listening for the next key).
+      const { captureFor, setCapture, rebind } = useKeybindingStore.getState();
+      if (captureFor) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (binding === "escape") {
+          setCapture(null);
+        } else {
+          void rebind(captureFor, binding).then(() => setCapture(null));
         }
         return;
       }
 
-      const key = e.key.toLowerCase();
-      const shift = e.shiftKey;
+      const command = resolveBindings(useKeybindingStore.getState().userRules).get(binding);
+      if (!command) return;
 
-      if (shift && key === "p") {
+      // Alt-only combos: do not steal plain Alt presses, only combos that match.
+      if (binding.startsWith("alt+") && !ctrl) {
         e.preventDefault();
-        runCommand("workbench.action.showCommands");
-        return;
-      }
-      if (!shift && key === "p") {
-        e.preventDefault();
-        runCommand("workbench.command.quickOpen");
-        return;
-      }
-      if (shift && key === "e") {
-        e.preventDefault();
-        runCommand("workbench.view.explorer");
-        return;
-      }
-      if (shift && key === "f") {
-        e.preventDefault();
-        runCommand("workbench.view.search");
-        return;
-      }
-      if (shift && key === "g") {
-        e.preventDefault();
-        runCommand("workbench.view.scm");
-        return;
-      }
-      if (shift && key === "m") {
-        e.preventDefault();
-        runCommand("workbench.panel.problems");
-        return;
-      }
-      if (shift && (key === "`" || key === "~")) {
-        e.preventDefault();
-        runCommand("workbench.action.terminal.new");
-        return;
-      }
-      if (key === "`" || key === "~") {
-        e.preventDefault();
-        runCommand("workbench.action.terminal.toggleTerminal");
+        runCommand(command);
         return;
       }
 
-      switch (key) {
-        case "b":
-          e.preventDefault();
-          runCommand("workbench.action.toggleSidebar");
-          break;
-        case "s":
-          e.preventDefault();
-          void useEditorStore.getState().save();
-          break;
-        case "w":
-          if (!isTextInput(e.target)) {
-            e.preventDefault();
-            const s = useEditorStore.getState();
-            const key = selectActiveKey(s);
-            if (key) s.closeTab(key);
-          }
-          break;
-        case "\\":
-          if (!isTextInput(e.target)) {
-            e.preventDefault();
-            useEditorStore.getState().splitGroup("right");
-          }
-          break;
-        case "n":
-          if (!isTextInput(e.target)) {
-            e.preventDefault();
-            runCommand("workbench.action.files.newFile");
-          }
-          break;
-        case "=":
-        case "+":
-          e.preventDefault();
-          runCommand("editor.action.fontZoomIn");
-          break;
-        case "-":
-          e.preventDefault();
-          runCommand("editor.action.fontZoomOut");
-          break;
-        case ",":
-          e.preventDefault();
-          runCommand("workbench.action.openSettings");
-          break;
-        default:
-          break;
-      }
+      if (!ctrl && !binding.startsWith("alt+")) return; // defaults are Ctrl-based
 
-      void useTerminalStore;
-      void useWorkspaceStore;
+      if (NO_TEXT_INPUT.has(command) && isTextInput(e.target)) return;
+
+      e.preventDefault();
+      runCommand(command);
     };
 
     window.addEventListener("keydown", onKeyDown, true);

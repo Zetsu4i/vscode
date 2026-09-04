@@ -60,6 +60,10 @@ export default function TitleBar() {
           label: "Preferences",
           action: () => useEditorStore.getState().openSpecial("settings"),
         },
+        {
+          label: "Keyboard Shortcuts",
+          action: () => useEditorStore.getState().openSpecial("keybindings"),
+        },
         { label: "", separator: true },
         {
           label: "Close Folder",
