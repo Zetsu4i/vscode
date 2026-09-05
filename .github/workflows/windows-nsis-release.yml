@@ -121,6 +121,14 @@ jobs:
         if: steps.cache-node-modules.outputs.cache-hit != 'true'
         uses: ./.github/actions/save-node-modules
 
+      # postinstall normally downloads electron.d.ts into .build/typings/
+      # (OUTSIDE node_modules, so the node_modules cache never carries it).
+      # On cache hits npm ci is skipped, so install the typings explicitly —
+      # idempotent, checksum-guarded, ~100KB download.
+      - name: Ensure electron typings
+        shell: bash
+        run: node build/npm/electronTypes.ts
+
       # Phase 0 guard: the original tree must keep typechecking while the
       # shell is being swapped underneath it.
       - name: Typecheck full src tree
