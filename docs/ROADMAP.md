@@ -29,10 +29,55 @@ working app. Nothing merges if the app does not run.
 - [ ] Large-file streaming reads; "Open in hex viewer" for binaries
 - [ ] Editor settings: font size/ligatures, minimap toggle, word wrap, whitespace
 
+## Phase 1.5 — Theme system & workbench chrome ✅
+
+Product decision: the native rebuild is the main line — no more reliance
+on hosting the upstream vscode-web workbench (too restricted). SideX
+(github.com/Sidenai/sidex) was studied for architecture: it is the
+Code-OSS workbench on Tauri (a plumbing reference, not a rebuild), and it
+never shipped a working top menu bar on Windows/Linux nor a working
+theme switcher. VSTauri does both natively:
+
+- [x] Theme registry (`src/theme/themes.ts`): 5 pixel-faithful themes
+      transcribed from the real microsoft/vscode theme definitions with
+      include chains resolved — Dark+ (default dark), Dark Modern,
+      Light+ (default light), Light Modern, Monokai
+- [x] One theme = chrome CSS variables + Monaco token theme + xterm
+      palette, applied atomically on <html>
+- [x] Live-preview theme picker in the command palette (arrow keys
+      preview the whole workbench, Enter commits, Escape reverts) and
+      File > Preferences > Color Theme — the piece SideX never got
+      working
+- [x] Persistence via localStorage; first frame already themed
+- [x] workbench.css fully variableized (no light-hostile hardcoded
+      overlays left)
+- [x] Complete VSCode menu bar with working editor actions
+      (undo/redo/clipboard/find/replace/format/select-all/line ops)
+      through `editorBridge.ts`; zoom via Tauri webview `setZoom`
+- [x] New keybindings: Ctrl+Shift+X, Ctrl+J, Ctrl+G, Ctrl+=, Ctrl+-,
+      Ctrl+0, Ctrl+H, Ctrl+/
+
+## Phase 1.6 — Adopted from the SideX study (next)
+
+- [ ] PTY flow control: byte-count high-watermark + `terminal_ack_data`
+      acks, pre-attach buffering (SideX's best terminal idea)
+- [ ] Window-state persistence: debounced save of sidebar width, panel
+      height, maximized state; restore before show
+- [ ] Shell enumeration + default-shell detection for a terminal
+      profile picker
+- [ ] Window decorations `false` + restore-and-show after first paint
+      (kills the white-flash startup)
+- [ ] Custom `vstauri-asset` protocol with traversal guards for
+      workspace file previews
+- [ ] Avoid SideX's failure modes: no dead parallel service layers, no
+      build-time dependency on a local VSCode install, no `window.eval`
+      event injection, no error-swallowing invoke wrappers
+
 ## Phase 2 — Personalization
 
 - [ ] `settings.json` + Settings UI (scopes: user / workspace)
-- [ ] Theme engine: `contributes.themes` → workbench CSS variables + Monaco themes
+- [x] Theme engine core: workbench CSS variables + Monaco themes + xterm
+      palettes (Phase 1.5) — `contributes.themes` support remains
 - [ ] Icon themes
 - [ ] Keybinding editor + user keybindings.json
 - [ ] Profiles: recent workspaces store, layout persistence, session restore
