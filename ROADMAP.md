@@ -77,7 +77,7 @@ Establish a safe main-only baseline, add agent rules, roadmap, and CI.
 
 ## Phase 1: Tauri Shell Prototype
 
-### Status: ⬜ Not started
+### Status: 🟦 In progress
 
 ### Goal
 
@@ -85,16 +85,21 @@ Open the existing VS Code workbench UI inside a Tauri window without replacing f
 
 ### Tasks
 
-- [ ] Add `src-tauri/` to the repository
-- [ ] Configure `src-tauri/tauri.conf.json` to load the existing workbench build output
-- [ ] Create a Tauri preload shim that exposes minimal browser globals:
-  - [ ] `window.process.platform`
-  - [ ] `window.process.env`
-  - [ ] `setImmediate`
-  - [ ] `Buffer`
-  - [ ] `global`
-- [ ] Get the workbench window to render without fatal errors
-- [ ] Keep Electron app still buildable in parallel
+- [x] Add `src-tauri/` to the repository
+- [x] Configure `src-tauri/tauri.conf.json` to load the existing workbench build output
+  - Loads `out/vs/code/electron-browser/workbench/workbench.html` via a loopback-only
+    static server (`src-tauri/src/server.rs`); diagnostics page served when `out/` is missing
+- [x] Create a Tauri preload shim that exposes minimal browser globals:
+  - [x] `window.process.platform`
+  - [x] `window.process.env`
+  - [x] `setImmediate`
+  - [x] `Buffer`
+  - [x] `global`
+  - Also mirrors Electron's preload `window.vscode` namespace (ipcRenderer,
+    ipcMessagePort, webFrame, webUtils, process, context) and resolves the
+    window configuration over Tauri IPC
+- [ ] Get the workbench window to render without fatal errors *(requires a Windows/WebView2 run)*
+- [x] Keep Electron app still buildable in parallel *(no Electron/Node source modified)*
 
 ### Acceptance
 
