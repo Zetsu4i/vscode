@@ -1,0 +1,236 @@
+name: Windows NSIS Release
+
+# Per AGENTS.md hard constraint 1: all product work happens on `tauri-shell`.
+# `main` stays a pristine mirror of the upstream fork.
+#
+# Per AGENTS.md hard constraint 11 this pipeline builds the NATIVE DESKTOP
+# workbench (out-vscode-min, vs/code/electron-browser/workbench) and bundles it
+# as a Tauri resource. It never builds vscode-web and never serves the UI over
+# HTTP: the Rust shell loads it from disk through a custom URI protocol.
+#
+# Every successful build is published as a GitHub Release automatically.
+
+on:
+  push:
+    branches:
+      - tauri-shell
+    paths-ignore:
+      - '**.md'
+  workflow_dispatch:
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # 1. Build the real VS Code desktop workbench (renderer bundle + built-in
+  #    extensions + extension host). Cached on the source tree hash so an
+  #    unchanged tree skips the ~30 min npm ci + gulp pipeline.
+  # ---------------------------------------------------------------------------
+  build-workbench:
+    runs-on: windows-latest
+    timeout-minutes: 120
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read product metadata
+        id: meta
+        shell: bash
+        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Compute workbench cache key
+        id: key
+        shell: bash
+        run: |
+          echo "key=vscode-desktop-${{ runner.os }}-${{ hashFiles('src/**', 'build/**', 'package-lock.json', 'product.json') }}" >> "$GITHUB_OUTPUT"
+
+      - name: Restore cached workbench build
+        id: wb-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            out-vscode-min
+            .build/extensions
+          key: ${{ steps.key.outputs.key }}
+
+      - uses: actions/setup-node@v4
+        if: steps.wb-cache.outputs.cache-hit != 'true'
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - uses: actions/setup-python@v5
+        if: steps.wb-cache.outputs.cache-hit != 'true'
+        with:
+          python-version: '3.11'
+
+      - name: npm ci
+        if: steps.wb-cache.outputs.cache-hit != 'true'
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: 1
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
+        run: npm ci --no-audit --no-fund
+
+      - name: Typecheck renderer (tsc --noEmit)
+        if: steps.wb-cache.outputs.cache-hit != 'true'
+        run: npx tsc --noEmit -p src/tsconfig.json
+
+      - name: Build desktop workbench bundle
+        if: steps.wb-cache.outputs.cache-hit != 'true'
+        run: npm run gulp minify-vscode
+
+      - name: Build built-in extensions
+        if: steps.wb-cache.outputs.cache-hit != 'true'
+        run: npm run gulp compile-extensions-build
+
+      # Regression guard for the "blank window" class of bug: if the bundler
+      # drops one of these the shell boots into an empty WebView2.
+      - name: Assert workbench boot files exist
+        shell: bash
+        run: |
+          set -e
+          for f in \
+            out-vscode-min/vs/code/electron-browser/workbench/workbench.html \
+            out-vscode-min/vs/code/electron-browser/workbench/workbench.js \
+            out-vscode-min/vs/workbench/workbench.desktop.main.css \
+            out-vscode-min/nls.messages.js; do
+            [ -f "$f" ] || { echo "::error::missing workbench boot file: $f"; exit 1; }
+            echo "ok  $f"
+          done
+
+      - name: Upload workbench artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vscode-desktop-workbench
+          path: |
+            out-vscode-min
+            .build/extensions
+          retention-days: 7
+
+  # ---------------------------------------------------------------------------
+  # 2. Bundle the Windows NSIS installer (only target per AGENTS.md rule 9).
+  #    Skipped until src-tauri/ lands in Phase 1.
+  # ---------------------------------------------------------------------------
+  bundle-windows:
+    needs: build-workbench
+    runs-on: windows-latest
+    timeout-minutes: 90
+    outputs:
+      bundled: ${{ steps.guard.outputs.present }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Is the Tauri shell present yet?
+        id: guard
+        shell: bash
+        run: |
+          if [ -f src-tauri/tauri.conf.json ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::src-tauri/ not present yet (Phase 1) — skipping bundle"
+          fi
+
+      - name: Download workbench build
+        if: steps.guard.outputs.present == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: vscode-desktop-workbench
+          path: src-tauri/resources/workbench
+
+      - name: Install Rust (stable)
+        if: steps.guard.outputs.present == 'true'
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        if: steps.guard.outputs.present == 'true'
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          key: windows
+
+      - name: Cache tauri-cli binary
+        if: steps.guard.outputs.present == 'true'
+        id: tacli
+        uses: actions/cache@v4
+        with:
+          path: ~\.cargo\bin\cargo-tauri.exe
+          key: tauri-cli-v2-windows-stable
+
+      - name: Install tauri-cli
+        if: steps.guard.outputs.present == 'true' && steps.tacli.outputs.cache-hit != 'true'
+        run: cargo install tauri-cli --version "^2" --locked
+
+      - name: Cache NSIS tooling
+        if: steps.guard.outputs.present == 'true'
+        uses: actions/cache@v4
+        with:
+          path: ~\AppData\Local\tauri
+          key: tauri-nsis-windows-v1
+
+      - name: Build Windows bundle (NSIS only)
+        if: steps.guard.outputs.present == 'true'
+        run: cargo tauri build --config src-tauri/tauri.windows.conf.json
+
+      # End-to-end guard: launch the built binary in headless self-check mode
+      # and assert the custom-protocol asset resolver serves the workbench with
+      # correct MIME types. This is the class of bug that produces a window
+      # rendering HTML as literal text or a blank page.
+      - name: Smoke test the built app
+        if: steps.guard.outputs.present == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          EXE="$(ls src-tauri/target/release/*.exe | head -1)"
+          echo "smoke target: $EXE"
+          "$EXE" --self-check --workbench-dir "$PWD/src-tauri/resources/workbench/out-vscode-min" \
+            | tee smoke.out
+          grep -q 'SELFCHECK_OK' smoke.out \
+            || { echo "::error::shell self-check failed"; exit 1; }
+
+      - name: Upload Windows installer (NSIS)
+        if: steps.guard.outputs.present == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: installers-windows
+          path: src-tauri/target/release/bundle/nsis/*-setup.exe
+          retention-days: 7
+
+  # ---------------------------------------------------------------------------
+  # 3. Release every successful build that produced an installer
+  # ---------------------------------------------------------------------------
+  release:
+    needs: [build-workbench, bundle-windows]
+    if: ${{ needs.bundle-windows.result == 'success' && needs.bundle-windows.outputs.bundled == 'true' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download installer
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          pattern: installers-*
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: dev-${{ github.run_number }}
+          name: "Dev build ${{ github.run_number }} (v${{ needs.build-workbench.outputs.version }})"
+          body: |
+            Automated build of `${{ github.sha }}`.
+
+            - **Windows**: `*-setup.exe` (NSIS)
+
+            The bundled UI is the pristine VS Code **desktop** workbench loaded
+            from disk by the Rust/Tauri shell through a custom URI protocol —
+            no Electron, no web server, no vscode-web.
+          prerelease: true
+          files: |
+            dist/**/*.exe
