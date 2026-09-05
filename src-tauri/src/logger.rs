@@ -33,6 +33,8 @@ pub fn init(logs_dir: &Path) {
     }
 }
 
+/// Log file location (reserved for the Phase 2 diagnostics command surface).
+#[allow(dead_code)]
 pub fn log_path() -> Option<PathBuf> {
     LOG_PATH.lock().ok().and_then(|guard| guard.clone())
 }

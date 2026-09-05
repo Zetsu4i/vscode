@@ -4,7 +4,7 @@
   "version": "1.138.0",
   "identifier": "com.zetsu4i.vstauri",
   "build": {
-    "frontendDist": "../frontend"
+    "frontendDist": "frontend"
   },
   "app": {
     "windows": [],
@@ -16,6 +16,6 @@
     "active": true,
     "targets": ["nsis"],
     "icon": ["icons/code.ico"],
-    "resources": ["resources/client/**"]
+    "resources": ["resources/client/**/*"]
   }
 }
