@@ -5,20 +5,17 @@ name: Windows NSIS Release
 # baseline this branch was cut from. Never merge or copy from other
 # branches (tauri-rebuild, copilot/*, arena/*, ...).
 #
-# Phase-gated design (ROADMAP.md Phase 0+):
-#   1. verify-baseline — always runs: proves the fork's original
-#      Electron/TypeScript tree still compiles on Windows before any
-#      shell work lands (Phase 0 acceptance).
-#   2. shell-check — detects when the Phase 1 Tauri shell lands.
-#   3. bundle-windows — NSIS bundle (constraint 9: NSIS only,
-#      constraint 11: native WebView2 shell, no vscode-web/server
-#      hosting). Automatically skipped until `src-tauri/tauri.conf.json`
-#      exists, so CI stays green during Phase 0.
-#   4. release — publishes every successful bundle as a prerelease.
-#
-# Note: `workflow_dispatch` only becomes selectable in the Actions UI
-# once this file also exists on the default branch; push triggers on
-# `tauri-rewrite` work from the first commit that adds this file.
+# Pipeline (ROADMAP.md Phase 0 + Phase 1):
+#   1. build-workbench — compiles the original VS Code renderer on Windows
+#      (Phase 0 baseline guard: the Electron/TypeScript tree must still
+#      build) and assembles the client bundle: out/ + runtime node_modules
+#      + product.json + nls.messages.json.
+#   2. bundle-windows — builds the Tauri v2 / WebView2 shell around that
+#      bundle and produces the NSIS installer (constraint 9: NSIS only).
+#      The workbench is served through the in-process `vscode-file://`
+#      custom protocol (constraint 11: no vscode-web, no HTTP server, no
+#      background hosting — only static files read from disk by Rust).
+#   3. release — publishes every successful bundle as a prerelease.
 
 on:
   push:
@@ -37,20 +34,18 @@ permissions:
 
 env:
   # Compile-only baseline: the Electron binary and Playwright browsers are
-  # not needed to compile the workbench. Native WebView2 tooling needed by
-  # the Phase 1+ bundle is handled inside src-tauri.
+  # not needed to compile the workbench. The Tauri shell uses WebView2,
+  # which is preinstalled on windows-latest runners.
   ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
   PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
 
 jobs:
   # ---------------------------------------------------------------------------
-  # 1. Baseline guard (ROADMAP Phase 0): the fork's original TypeScript tree
-  #    must still compile on Windows. Runs on every push so regressions
-  #    caused by shell work are caught before anything ships. This uses the
-  #    repo's own scripts (`typecheck-client`, `compile-client`) so the CI
-  #    can never drift from what developers run locally.
+  # 1. Compile the original workbench renderer and assemble the client bundle
+  #    (Phase 0 acceptance: original build runs on Windows CI; Phase 1
+  #    input: the bundle the Tauri shell serves).
   # ---------------------------------------------------------------------------
-  verify-baseline:
+  build-workbench:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -64,49 +59,133 @@ jobs:
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
 
+      # Phase 0 guard: the original tree must keep typechecking while the
+      # shell is being swapped underneath it.
       - name: Typecheck full src tree
         run: npm run typecheck-client
 
-      - name: Compile workbench (baseline smoke)
+      - name: Compile workbench (gulp compile)
         run: npm run compile-client
 
-      # Phase 1+ will hook in here: upload the compiled `out/` renderer
-      # payload and hand it to bundle-windows as the native WebView2
-      # frontend of the Tauri shell (no server, no vscode-web build).
-
-  # ---------------------------------------------------------------------------
-  # 2. Gate: is the Phase 1+ Tauri shell present on this branch yet?
-  # ---------------------------------------------------------------------------
-  shell-check:
-    runs-on: ubuntu-latest
-    outputs:
-      present: ${{ steps.check.outputs.present }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Check for src-tauri shell
-        id: check
+      # codicon.ttf is copied into the source tree by build/lib/compilation.ts
+      # during compile, but re-copy defensively when node_modules came from
+      # cache (same guard upstream uses in gulpfile.editor.ts).
+      - name: Ensure codicons present
+        shell: bash
         run: |
-          if [ -f src-tauri/tauri.conf.json ]; then
-            echo "present=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "present=false" >> "$GITHUB_OUTPUT"
+          if [ ! -f out/vs/base/browser/ui/codicons/codicon/codicon.ttf ]; then
+            echo "::warning::codicon.ttf missing after compile; copying from node_modules"
+            mkdir -p out/vs/base/browser/ui/codicons/codicon
+            cp node_modules/@vscode/codicons/dist/codicon.ttf out/vs/base/browser/ui/codicons/codicon/codicon.ttf
           fi
 
+      - name: Assemble client bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p staging
+          cp -r out staging/out
+          # Source maps are huge and not needed to boot the workbench.
+          find staging/out -name '*.map' -delete
+
+          # Runtime node_modules the renderer fetches through the
+          # vscode-file protocol (wasm/oniguruma, language detection,
+          # encoding). Anything missing beyond this list is a bug to fix in
+          # the ipc/404 logs, not a silent skip.
+          mkdir -p staging/node_modules/@vscode
+          cp -r node_modules/vscode-oniguruma staging/node_modules/
+          for pkg in vscode-regexp-languagedetection jschardet; do
+            if [ -d "node_modules/$pkg" ]; then
+              cp -r "node_modules/$pkg" staging/node_modules/
+            else
+              echo "::warning::optional runtime module not installed: $pkg"
+            fi
+          done
+          if [ -d node_modules/@vscode/iconv-lite-umd ]; then
+            cp -r node_modules/@vscode/iconv-lite-umd staging/node_modules/@vscode/
+          else
+            echo "::warning::optional runtime module not installed: @vscode/iconv-lite-umd"
+          fi
+
+          # Static resources referenced by the workbench.
+          cp -r resources staging/resources
+
+          # product.json + nls.messages.json are read by the Rust shell and
+          # served into the window configuration (same shape the Electron
+          # main process injects).
+          node <<'NODE'
+          const fs = require('fs');
+          const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+          const prod = JSON.parse(fs.readFileSync('product.json', 'utf8'));
+          prod.version = pkg.version;
+          prod.commit = process.env.GITHUB_SHA;
+          prod.date = new Date().toISOString().slice(0, 10);
+          fs.writeFileSync('staging/product.json', JSON.stringify(prod, null, 2));
+          const nlsSource = fs.readFileSync('out/nls.messages.js', 'utf8');
+          const match = nlsSource.match(/\[[\s\S]*\]/);
+          if (!match) { throw new Error('cannot extract NLS messages array from out/nls.messages.js'); }
+          const messages = JSON.parse(match[0]);
+          if (!Array.isArray(messages) || messages.length === 0) { throw new Error('NLS messages array is empty or not an array'); }
+          fs.writeFileSync('staging/nls.messages.json', JSON.stringify(messages));
+          console.log('product.json:', prod.nameShort, prod.version, prod.commit);
+          console.log('nls.messages.json:', messages.length, 'messages');
+          NODE
+
+      # Fail here, not on the user's desk: every file below is required for
+      # the workbench to boot through the vscode-file protocol.
+      - name: Assert client boot files
+        shell: bash
+        run: |
+          set -euo pipefail
+          for f in \
+            staging/out/vs/code/electron-browser/workbench/workbench.html \
+            staging/out/vs/code/electron-browser/workbench/workbench.js \
+            staging/out/vs/workbench/workbench.desktop.main.js \
+            staging/out/vs/workbench/workbench.desktop.main.css \
+            staging/out/nls.messages.js \
+            staging/out/vs/base/browser/ui/codicons/codicon/codicon.ttf \
+            staging/node_modules/vscode-oniguruma/release/onig.wasm \
+            staging/product.json \
+            staging/nls.messages.json; do
+            [ -f "$f" ] || { echo "::error::missing client boot file: $f"; exit 1; }
+            echo "ok  $f"
+          done
+
+      - name: Upload client bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: workbench-client
+          path: staging/
+          retention-days: 7
+
   # ---------------------------------------------------------------------------
-  # 3. Windows NSIS bundle (Tauri v2, WebView2). Only target per AGENTS.md
-  #    constraint 9. Rust deps, the tauri-cli binary and the NSIS tooling
-  #    are all cached. Skipped automatically until the Phase 1 shell lands.
+  # 2. Bundle the Windows NSIS installer (Tauri v2 + WebView2, only target
+  #    per AGENTS.md constraint 9). Rust deps, the tauri-cli binary and the
+  #    NSIS tooling are all cached.
   # ---------------------------------------------------------------------------
   bundle-windows:
-    needs: [verify-baseline, shell-check]
-    if: needs.shell-check.outputs.present == 'true'
+    needs: build-workbench
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
 
-      # Phase 1+ will download the compiled workbench payload here and
-      # place it where src-tauri expects it (ROADMAP Phase 1).
+      - name: Download client bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: workbench-client
+          path: src-tauri/resources/client
+
+      - name: Assert bundled client is complete
+        shell: bash
+        run: |
+          set -euo pipefail
+          for f in \
+            src-tauri/resources/client/out/vs/code/electron-browser/workbench/workbench.html \
+            src-tauri/resources/client/out/vs/workbench/workbench.desktop.main.js \
+            src-tauri/resources/client/product.json \
+            src-tauri/resources/client/nls.messages.json; do
+            [ -f "$f" ] || { echo "::error::client file missing in bundle: $f"; exit 1; }
+          done
 
       - name: Install Rust (stable, cached)
         uses: dtolnay/rust-toolchain@stable
@@ -134,21 +213,30 @@ jobs:
           path: ~\AppData\Local\tauri
           key: tauri-nsis-windows-v1
 
-      # Constraint 9: Windows NSIS only — no MSI/Wix/Mac/Linux bundling.
-      # Constraint 11: the bundle loads the original workbench renderer
-      # natively in WebView2 — no vscode-web build, no background HTTP
-      # server hosting the workbench.
+      # Constraint 9: Windows NSIS only. Constraint 11: the shell loads the
+      # original workbench renderer natively through the in-process
+      # vscode-file:// custom protocol — no server, no vscode-web build.
       - name: Build Windows bundle (NSIS only)
+        run: cargo tauri build
+
+      # Headless smoke: the exe verifies the bundled client boot files and
+      # writes vstauri-smoke.out (GUI-subsystem binaries cannot rely on
+      # stdout on Windows, so the report goes to a file).
+      - name: Smoke test the built app
         shell: bash
         run: |
-          if [ -f src-tauri/tauri.windows.conf.json ]; then
-            cargo tauri build --config src-tauri/tauri.windows.conf.json
-          else
-            cargo tauri build
+          set -euo pipefail
+          EXE="src-tauri/target/release/vstauri.exe"
+          if [ ! -f "$EXE" ]; then
+            echo "::error::vstauri.exe not found; release dir contents:"
+            ls src-tauri/target/release/ | head -30
+            exit 1
           fi
-
-      # TODO (Phase 1+): end-to-end smoke test of the built app — launch the
-      # exe, assert the workbench renders in WebView2, then publish.
+          export VSTAURI_CLIENT_DIR="$PWD/src-tauri/resources/client"
+          "$EXE" --vstauri-smoke
+          cat vstauri-smoke.out
+          grep -q "SMOKE OK" vstauri-smoke.out
+          echo "SMOKE OK — bundled workbench client verified"
 
       - name: Upload Windows installer (NSIS)
         uses: actions/upload-artifact@v4
@@ -159,11 +247,11 @@ jobs:
           if-no-files-found: error
 
   # ---------------------------------------------------------------------------
-  # 4. Release every successful bundle
+  # 3. Release every successful bundle
   # ---------------------------------------------------------------------------
   release:
-    needs: [verify-baseline, shell-check, bundle-windows]
-    if: ${{ always() && needs.bundle-windows.result == 'success' }}
+    needs: [build-workbench, bundle-windows]
+    if: ${{ always() && needs.build-workbench.result == 'success' && needs.bundle-windows.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -178,15 +266,23 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: dev-${{ github.run_number }}
-          name: "Dev build ${{ github.run_number }}"
+          name: "Dev build ${{ github.run_number }} (tauri-rewrite)"
           body: |
             Automated build of `${{ github.sha }}` on `tauri-rewrite`.
 
             - **Windows**: `*-setup.exe` (NSIS)
 
-            Native Tauri v2 shell (WebView2) bundling the original VS Code
-            workbench renderer. The Electron main process is being replaced
-            phase-by-phase; the extension host runs as a Node.js sidecar.
+            Phase 1 shell: the original VS Code workbench renderer served
+            natively through the Tauri v2 `vscode-file://` custom protocol
+            (WebView2). No Electron, no HTTP server, no vscode-web. The
+            renderer boots against a native window configuration and an
+            instrumented IPC bridge (`ipc-calls.jsonl` + `vstauri.log` in
+            `%APPDATA%\VSTauri\logs`) that feeds the next phases.
+
+            NOTE: Phase 1 scope is "workbench renders". Terminal, file
+            dialogs, storage and extensions land in later phases (see
+            ROADMAP.md); their IPC channels currently resolve to null and
+            are logged.
           prerelease: true
           files: |
             dist/**/*.exe

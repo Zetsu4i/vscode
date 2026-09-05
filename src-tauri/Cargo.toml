@@ -1,0 +1,18 @@
+[package]
+name = "vstauri"
+version = "1.138.0"
+description = "Visual Studio Code - Tauri v2 native shell (Phase 1: workbench renderer via vscode-file:// custom protocol)"
+authors = ["Zetsu4i"]
+license = "MIT"
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde_json = "1"
+
+[profile.release]
+# Keep default release settings; build speed matters for CI iteration.
+# Optimization pass is a later roadmap phase (Phase 11).

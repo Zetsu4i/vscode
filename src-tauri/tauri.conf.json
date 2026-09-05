@@ -1,0 +1,21 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Visual Studio Code",
+  "version": "1.138.0",
+  "identifier": "com.zetsu4i.vstauri",
+  "build": {
+    "frontendDist": "../frontend"
+  },
+  "app": {
+    "windows": [],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "icon": ["icons/code.ico"],
+    "resources": ["resources/client/**"]
+  }
+}

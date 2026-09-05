@@ -77,7 +77,7 @@ Establish a safe main-only baseline, add agent rules, roadmap, and CI.
 
 ## Phase 1: Tauri Shell Prototype
 
-### Status: ⬜ Not started
+### Status: 🟦 In progress
 
 ### Goal
 
@@ -85,23 +85,24 @@ Open the existing VS Code workbench UI inside a Tauri window without replacing f
 
 ### Tasks
 
-- [ ] Add `src-tauri/` to the repository
-- [ ] Configure `src-tauri/tauri.conf.json` to load the existing workbench build output
-- [ ] Create a Tauri preload shim that exposes minimal browser globals:
-  - [ ] `window.process.platform`
-  - [ ] `window.process.env`
-  - [ ] `setImmediate`
-  - [ ] `Buffer`
-  - [ ] `global`
-- [ ] Get the workbench window to render without fatal errors
-- [ ] Keep Electron app still buildable in parallel
+- [x] Add `src-tauri/` to the repository
+- [x] Configure `src-tauri/tauri.conf.json` to load the existing workbench build output
+  - Served through the in-process `vscode-file://` custom protocol registered in `src-tauri/src/protocol.rs` (the same scheme + authority the renderer derives its ESM base URL from: `vscode-file://vscode-app/<appRoot>/out/`). No HTTP server, no vscode-web.
+- [x] Create a Tauri preload shim that exposes minimal browser globals:
+  - [x] `window.vscode.process.platform` / `.arch` / `.env` / `.versions` / `.execPath` (full `ISandboxNodeProcess` surface from `globals.ts`)
+  - [x] `setImmediate`
+  - [x] `window.vscode.context.resolveConfiguration()` (replaces the `--vscode-window-config` IPC handshake; configuration built in Rust in `src-tauri/src/config.rs`)
+  - [x] `window.vscode.ipcRenderer` (send/invoke/on/once/removeListener with original `vscode:` channel names, routed to Rust and logged to `ipc-calls.jsonl`)
+  - [x] `Buffer` / `global` intentionally NOT shimmed (Electron sandboxed renderers do not expose them either)
+- [ ] Get the workbench window to render without fatal errors (needs first run on Windows; error feedback lands in `%APPDATA%\VSTauri\logs\vstauri.log` + `ipc-calls.jsonl`)
+- [x] Keep Electron app still buildable in parallel (Electron tree untouched)
 
 ### Acceptance
 
 - [ ] VS Code workbench renders in Tauri window
 - [ ] Editor area renders Monaco
 - [ ] No crash on initial startup
-- [ ] Original Electron build still works
+- [x] Original Electron build still works (compile job green on Windows CI)
 
 ---
 

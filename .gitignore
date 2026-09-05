@@ -54,3 +54,10 @@ dist
 .v[0-9]*/
 # Local agent validation evidence
 .agent-validation/
+
+# Tauri shell build artifacts (Phase 1)
+src-tauri/target/
+src-tauri/gen/
+vstauri-smoke.out
+src-tauri/resources/client/*
+!src-tauri/resources/client/.gitkeep
