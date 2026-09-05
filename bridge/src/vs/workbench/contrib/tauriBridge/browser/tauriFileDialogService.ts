@@ -117,7 +117,7 @@ export class TauriFileDialogService extends FileDialogService {
                 if (!bridge) {
                         return super.pickWorkspaceAndOpen(options);
                 }
-                const path = await bridge.call<string | null>('dialog.pick', 'workspace', options.defaultUri?.fsPath, options.title);
+                const path = await bridge.call<string | null>('dialog.pick', 'workspace', options.defaultUri?.fsPath);
                 if (path) {
                         return this.hostService.openWindow([{ workspaceUri: URI.file(path) }], { forceNewWindow: options.forceNewWindow, remoteAuthority: options.remoteAuthority });
                 }
