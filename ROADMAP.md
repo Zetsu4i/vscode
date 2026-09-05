@@ -397,3 +397,34 @@ web extensions work today. Node extensions cannot run in the webview yet.
   build (keyed on upstream pin + patches + bridge), Rust deps
   (`rust-cache`), the `cargo-tauri` binary and NSIS tooling — repeat
   builds drop from ~50 min to a fraction of that.
+- 2026-09-05 (later): **UI renders — user confirmed; open-folder/save and the
+  node_modules 404 root-caused and fixed.** The maintainer verified the
+  workbench now renders in the installed app and reported that opening a
+  folder and saving files does not work, plus a runtime 404 for
+  `/node_modules/vscode-regexp-languagedetection/dist/index.js`. Root cause
+  of the dialogs: the workbench startup applies the global singleton
+  registry AFTER `BrowserMain`'s `serviceCollection.set` calls
+  (`src/vs/workbench/browser/workbench.ts`), so the bridge's
+  `TauriFileDialogService` registered via `serviceCollection.set` was
+  silently replaced by upstream's browser `FileDialogService` — which for
+  the `file` scheme throws "Can't open folders..." and saves through the
+  File System Access API against a provider that is no longer registered.
+  Fix: `TauriFileDialogService` is now also pushed into the singleton
+  registry from `tauri.contribution.ts` (its module order guarantees it
+  lands after upstream's registration, and the last descriptor wins).
+  Extended the dialog bridge: native Save (untitled/Save As), Open
+  Workspace, `showSaveDialog`/`showOpenDialog` with title + filters
+  (`folder`/`file`/`files`/`workspace`/`save` modes in one `dialog.pick`
+  RPC). Session restore: the backbone now parses `?folder=`/`?workspace=`/
+  `?ew=` exactly like the official server, persists the last folder to
+  `last_folder.txt` in the app data dir, and injects `folderUri` into the
+  workbench configuration on plain launches — the app reopens the previous
+  workspace, desktop-style. The 404: upstream's `gulp vscode-web` packaging
+  does not ship node_modules (the official serve-web npm package does); the
+  language-detection/oniguruma/tree-sitter packages are now copied into the
+  client by `scripts/ship_node_modules.py` (also scans the built JS for
+  future references), asserted in CI boot-file checks and smoke
+  (`/node_modules/...` 200 + MIME), and the smoke also exercises `?folder=`
+  capture + `folderUri` restore injection. CI gates: bridge edits are
+  typechecked by the existing `tsc --noEmit` job; bridge changes invalidate
+  the client cache so this run rebuilds the full client once.
