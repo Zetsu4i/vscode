@@ -70,7 +70,7 @@ Establish a safe main-only baseline, add agent rules, roadmap, and CI.
 ### Acceptance
 
 - [ ] `main` builds successfully
-- [ ] CI produces a Windows artifact
+- [x] CI produces a Windows artifact (NSIS exe published as GitHub Release `dev-19`+ from `tauri-rewrite`)
 - [ ] Baseline metrics saved in `docs/baseline.md`
 
 ---
