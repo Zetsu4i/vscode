@@ -16,4 +16,8 @@ npm run gulp vscode-web-ci 2>&1 | tail -15
 # the backbone serves product.json to the workbench (productConfiguration)
 cp product.json ../vscode-web/product.json
 
+# runtime node_modules the web workbench resolves at /node_modules/...
+# (language detection, oniguruma, tree-sitter) — see the script header
+python3 ../scripts/ship_node_modules.py ../vscode-web node_modules
+
 echo "client build complete: $(pwd)/../vscode-web"

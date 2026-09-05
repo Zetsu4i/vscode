@@ -110,6 +110,14 @@ jobs:
         working-directory: upstream
         run: npm run gulp vscode-web-ci
 
+      # The gulp packaging task does not include node_modules (the official
+      # `code serve-web` npm package ships them separately). The workbench
+      # loads some packages from /node_modules/... at runtime — without these
+      # the app logs 404s (observed: vscode-regexp-languagedetection).
+      - name: Ship runtime node_modules into the client
+        if: steps.client-cache.outputs.cache-hit != 'true'
+        run: python3 scripts/ship_node_modules.py vscode-web upstream/node_modules
+
       # The backbone serves product.json to the workbench as
       # `productConfiguration` (same as webClientServer.ts does upstream).
       # The gulp packaging task does not include it — inject it here with the
@@ -145,6 +153,8 @@ jobs:
             vscode-web/out/vs/code/browser/workbench/workbench.js \
             vscode-web/out/vs/code/browser/workbench/workbench.css \
             vscode-web/out/nls.messages.js \
+            vscode-web/node_modules/vscode-regexp-languagedetection/dist/index.js \
+            vscode-web/node_modules/vscode-oniguruma/release/onig.wasm \
             vscode-web/product.json; do
             [ -f "$f" ] || { echo "::error::missing client boot file: $f"; exit 1; }
             echo "ok  $f"
@@ -277,8 +287,26 @@ jobs:
           check "/out/vs/code/browser/workbench/workbench.js" "text/javascript"
           check "/out/vs/code/browser/workbench/workbench.css" "text/css"
           check "/out/nls.messages.js" "text/javascript"
+          check "/node_modules/vscode-regexp-languagedetection/dist/index.js" "text/javascript"
+          check "/node_modules/vscode-oniguruma/release/onig.wasm" "application/wasm"
           check "/product.json" "application/json"
           check "/resources/server/favicon.ico" "image/x-icon"
+
+          # 3) ?folder= capture + last-session restore injection: navigating to
+          #    /?folder=... (what the workbench does when opening a folder)
+          #    must persist the folder, and a subsequent plain load must get
+          #    it injected into the workbench configuration (meta attribute).
+          #    (the injection checks the folder exists — create it first;
+          #    key order in the JSON is not asserted to stay independent of
+          #    serde_json feature resolution)
+          mkdir -p /c/vstauri-smoke
+          curl -sS -o /dev/null "$base/?folder=file%3A%2F%2F%2FC%3A%2Fvstauri-smoke"
+          curl -sS -o wb2.html "$base/"
+          grep -q '&quot;folderUri&quot;' wb2.html \
+            || { echo "::error::last-folder injection missing"; kill_smoke; exit 1; }
+          grep -q '/C:/vstauri-smoke' wb2.html \
+            || { echo "::error::injected folderUri has wrong path"; kill_smoke; exit 1; }
+          echo "ok  ?folder= capture + folderUri restore injection"
 
           kill_smoke
           echo "SMOKE OK — workbench serves as text/html with valid __VSTAURI__"
