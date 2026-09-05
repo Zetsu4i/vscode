@@ -81,6 +81,16 @@ fn build(app: &tauri::AppHandle) -> Value {
             json!([])
         });
 
+    // Dev-parity CSS loading: every out-relative css file, mirroring
+    // cssDevelopmentService.getCssModules() (sorted 'vs/...' paths) which
+    // setupCSSImportMaps() in the workbench bootstrap consumes.
+    let css_modules = read_json_file(&client_root.join("css-modules.json"))
+        .filter(|value| value.is_array())
+        .unwrap_or_else(|| {
+            crate::logger::log_app("warn", "css-modules.json missing/invalid; workbench will boot without dev css import map");
+            json!([])
+        });
+
     let exec_path = std::env::current_exe()
         .map(|p| p.to_string_lossy().into_owned())
         .unwrap_or_default();
@@ -131,6 +141,7 @@ fn build(app: &tauri::AppHandle) -> Value {
             "messages": nls_messages,
             "language": "en"
         },
+        "cssModules": css_modules,
 
         // INativeWindowConfiguration
         "mainPid": std::process::id(),

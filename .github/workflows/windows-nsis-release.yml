@@ -178,6 +178,20 @@ jobs:
           # Static resources referenced by the workbench.
           cp -r resources staging/resources
 
+          # DEV-parity CSS loading: the dev compile does not bundle
+          # workbench.desktop.main.css (that is a production-build artifact).
+          # Dev mode instead ships configuration.cssModules — the sorted list
+          # of every out-relative css file — which setupCSSImportMaps() in
+          # workbench.ts turns into an import map + <link> loading (exactly
+          # what cssDevelopmentService.getCssModules() sends in dev Electron).
+          # The <link> in workbench.html still references the bundled css, so
+          # ship an empty placeholder to keep that request from 404ing.
+          mkdir -p staging/out/vs/workbench
+          : > staging/out/vs/workbench/workbench.desktop.main.css
+          find staging/out -name '*.css' -type f | sed 's|^staging/out/||' | sort > staging/css-modules.txt
+          node -e "const fs=require('fs');const m=fs.readFileSync('staging/css-modules.txt','utf8').split('\n').filter(Boolean);if(m.length===0){throw new Error('no css modules found under out/');}fs.writeFileSync('staging/css-modules.json',JSON.stringify(m));console.log('css-modules.json:',m.length,'modules');"
+          rm staging/css-modules.txt
+
           # product.json + nls.messages.json are read by the Rust shell and
           # served into the window configuration (same shape the Electron
           # main process injects).
@@ -236,6 +250,7 @@ jobs:
             staging/out/vs/code/electron-browser/workbench/workbench.js \
             staging/out/vs/workbench/workbench.desktop.main.js \
             staging/out/vs/workbench/workbench.desktop.main.css \
+            staging/css-modules.json \
             staging/out/vs/base/browser/ui/codicons/codicon/codicon.ttf \
             staging/node_modules/vscode-oniguruma/release/onig.wasm \
             staging/product.json \
