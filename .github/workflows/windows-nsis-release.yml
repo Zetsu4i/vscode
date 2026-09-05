@@ -75,7 +75,16 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
-          cache: npm
+
+      # Upstream's own node_modules cache mechanism (composite actions in
+      # .github/actions/). Skips the ~18 min npm ci on every unchanged
+      # package-lock — critical for fast iteration on this pipeline.
+      - name: Restore node_modules cache
+        id: cache-node-modules
+        uses: ./.github/actions/restore-node-modules
+        with:
+          key-prefix: node_modules-windows-tauri
+          key-args: "win32 x64 $(node -p process.arch)"
 
       # build/npm/preinstall.ts requires a VS C++ toolchain and probes
       # hardcoded `Microsoft Visual Studio/<2019|2022>/<Edition>` paths. The
@@ -93,6 +102,7 @@ jobs:
           "vs2022_install=$vs" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
       - name: Install dependencies
+        if: steps.cache-node-modules.outputs.cache-hit != 'true'
         shell: bash
         env:
           npm_config_foreground_scripts: 'true'
@@ -106,6 +116,10 @@ jobs:
           done
           echo "::error::npm ci failed after 5 attempts"
           exit 1
+
+      - name: Save node_modules cache
+        if: steps.cache-node-modules.outputs.cache-hit != 'true'
+        uses: ./.github/actions/save-node-modules
 
       # Phase 0 guard: the original tree must keep typechecking while the
       # shell is being swapped underneath it.
