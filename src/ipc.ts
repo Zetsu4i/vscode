@@ -47,6 +47,20 @@ export interface PtyInfo {
   shell: string;
 }
 
+export interface ShellInfo {
+  name: string;
+  path: string;
+  default: boolean;
+}
+
+export interface WindowState {
+  width: number;
+  height: number;
+  x: number;
+  y: number;
+  maximized: boolean;
+}
+
 export interface ExtensionManifest {
   id: string;
   name: string;
@@ -105,6 +119,17 @@ export const ipc = {
   resizePty: (id: number, rows: number, cols: number) =>
     invoke<void>("resize_pty", { id, rows, cols }),
   killPty: (id: number) => invoke<void>("kill_pty", { id }),
+  /** Attach: flush the backend's pre-attach output buffer into the webview. */
+  attachPty: (id: number) => invoke<void>("pty_attach", { id }),
+  /** Flow control: report `bytes` of output written into the terminal. */
+  ackPty: (id: number, bytes: number) => invoke<void>("pty_ack", { id, bytes }),
+  /** Shell enumeration for the terminal profile picker. */
+  listShells: () => invoke<ShellInfo[]>("list_shells"),
+
+  // assets + window state
+  setAssetRoots: (roots: string[]) => invoke<void>("set_asset_roots", { roots }),
+  saveWindowState: (st: WindowState) => invoke<void>("save_window_state", { state: st }),
+  windowReady: () => invoke<void>("window_ready"),
 
   // search
   searchWorkspace: (

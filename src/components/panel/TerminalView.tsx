@@ -1,9 +1,9 @@
 import { useEffect, useRef } from "react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
-import { onPtyOutput, onPtyExit } from "../../ipc";
+import { onPtyOutput, onPtyExit, ipc, ShellInfo } from "../../ipc";
 import { useTerminalStore, Term } from "../../state/terminalStore";
-import { useUiStore } from "../../state/uiStore";
+import { useUiStore, MenuItem } from "../../state/uiStore";
 import { getTheme } from "../../theme/themes";
 
 function TerminalInstance({ term }: { term: Term }) {
@@ -44,11 +44,30 @@ function TerminalInstance({ term }: { term: Term }) {
       void ipc.resizePty(term.id, t.rows, t.cols);
     });
 
+    let pendingAck = 0;
+    let ackTimer: ReturnType<typeof setTimeout> | null = null;
+    const flushAck = () => {
+      ackTimer = null;
+      if (pendingAck > 0) {
+        void ipc.ackPty(term.id, pendingAck).catch(() => {});
+        pendingAck = 0;
+      }
+    };
+
     const unlistenOut = onPtyOutput(term.id, (b64) => {
       const bin = atob(b64);
       const bytes = new Uint8Array(bin.length);
       for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
       t.write(bytes);
+      // Flow control: batch-ack consumed bytes so the backend pump resumes
+      // before the high watermark without drowning IPC in tiny calls.
+      pendingAck += bytes.length;
+      if (pendingAck >= 64 * 1024) {
+        if (ackTimer) clearTimeout(ackTimer);
+        flushAck();
+      } else if (ackTimer === null) {
+        ackTimer = setTimeout(flushAck, 32);
+      }
     });
 
     const unlistenExit = onPtyExit(term.id, () => {
@@ -72,11 +91,17 @@ function TerminalInstance({ term }: { term: Term }) {
     });
     ro.observe(host);
 
+    // Attach now that the output listener is live: everything the shell
+    // printed before this point (prompt, MOTD) is flushed from the Rust
+    // pre-attach buffer, in order. Previously this early output was lost.
+    void ipc.attachPty(term.id).catch(() => {});
+
     return () => {
       ro.disconnect();
       termRef.current = null;
       dataSub.dispose();
       resizeSub.dispose();
+      if (ackTimer) clearTimeout(ackTimer);
       void unlistenOut.then((f) => f());
       void unlistenExit.then((f) => f());
       t.dispose();
@@ -99,8 +124,25 @@ export default function TerminalView() {
   const create = useTerminalStore((s) => s.create);
   const kill = useTerminalStore((s) => s.kill);
   const root = useUiStore((s) => s.panelVisible);
-
+  const shellsRef = useRef<ShellInfo[] | null>(null);
   void root;
+
+  // Shell profile picker (the dropdown next to "+") — shells are enumerated
+  // once by the backend on first open.
+  const openShellMenu = async (x: number, y: number) => {
+    try {
+      if (!shellsRef.current) {
+        shellsRef.current = await ipc.listShells();
+      }
+      const items: MenuItem[] = shellsRef.current.map((s) => ({
+        label: `${s.name}${s.default ? "   (default)" : ""}`,
+        action: () => void create(undefined, s.path),
+      }));
+      if (items.length) useUiStore.getState().openContextMenu(x, y, items);
+    } catch {
+      /* enumeration unavailable — the "+" button still works */
+    }
+  };
 
   return (
     <div className="terminal-view">
@@ -139,6 +181,16 @@ export default function TerminalView() {
             onClick={() => void create()}
           >
             <i className="codicon codicon-add" />
+          </button>
+          <button
+            className="terminal-list-new"
+            title="Select Terminal Profile"
+            onClick={(e) => {
+              const r = e.currentTarget.getBoundingClientRect();
+              void openShellMenu(r.left, r.bottom + 4);
+            }}
+          >
+            <i className="codicon codicon-chevron-down" />
           </button>
         </div>
       )}
