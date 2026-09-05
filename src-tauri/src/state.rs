@@ -10,6 +10,45 @@ use std::sync::{Arc, Mutex};
 use crate::server::fs::WatcherEntry;
 use crate::server::pty::PtyEntry;
 
+// ---------------------------------------------------------------------------
+// file log — release builds have no console (`windows_subsystem = "windows"`),
+// so boot info and 404s are appended to a log file for post-mortem debugging.
+// ---------------------------------------------------------------------------
+
+static LOG_PATH: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+
+const LOG_MAX_BYTES: u64 = 512 * 1024;
+
+/// Install the file logger (best effort; logging never panics).
+pub fn init_log(path: PathBuf) {
+    if let Some(dir) = path.parent() {
+        let _ = std::fs::create_dir_all(dir);
+    }
+    if let Ok(md) = std::fs::metadata(&path) {
+        if md.len() > LOG_MAX_BYTES {
+            let _ = std::fs::remove_file(&path); // truncate oversize logs
+        }
+    }
+    let _ = LOG_PATH.set(path);
+}
+
+/// Append one line to the log file. No-op when the logger was not installed.
+pub fn log(msg: &str) {
+    use std::io::Write as _;
+    let Some(p) = LOG_PATH.get() else { return };
+    let ts = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    if let Ok(mut f) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(p)
+    {
+        let _ = writeln!(f, "[{ts}] {msg}");
+    }
+}
+
 pub struct AppState {
     /// Per-session random token; every bridge call and websocket must present it.
     pub token: String,
