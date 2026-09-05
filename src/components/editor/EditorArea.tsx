@@ -2,6 +2,7 @@ import { useEditorStore } from "../../state/editorStore";
 import TabBar from "./TabBar";
 import MonacoPane from "./MonacoPane";
 import DiffPane from "./DiffPane";
+import ImagePane, { isImage } from "./ImagePane";
 import Welcome from "./Welcome";
 
 export default function EditorArea() {
@@ -14,7 +15,12 @@ export default function EditorArea() {
     <div className="editor-area">
       <TabBar />
       <div className="editor-body">
-        {active?.kind === "file" && <MonacoPane key={active.path} path={active.path} />}
+        {active?.kind === "file" && isImage(active.path) && (
+          <ImagePane key={active.path} path={active.path} />
+        )}
+        {active?.kind === "file" && !isImage(active.path) && (
+          <MonacoPane key={active.path} path={active.path} />
+        )}
         {active?.kind === "diff" && <DiffPane key={active.path} path={active.path} />}
         {!active && <Welcome />}
       </div>

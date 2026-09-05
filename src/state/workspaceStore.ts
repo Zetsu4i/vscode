@@ -41,6 +41,13 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     });
     localStorage.setItem(LS_KEY, JSON.stringify(norm));
 
+    // Widen (or re-scope) the vstauri:// asset sandbox to this workspace root.
+    try {
+      await ipc.setAssetRoots([norm]);
+    } catch (e) {
+      console.error("asset roots failed", e);
+    }
+
     const recents = [norm, ...get().recentFolders.filter((r) => r !== norm)].slice(0, 8);
     set({ recentFolders: recents });
     localStorage.setItem(LS_RECENT, JSON.stringify(recents));
@@ -57,6 +64,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   closeFolder: () => {
     set({ root: null, rootName: "", tree: {}, expanded: {} });
     localStorage.removeItem(LS_KEY);
+    // Close the asset sandbox: no workspace, no servable files.
+    void ipc.setAssetRoots([]).catch(() => {});
     useGitStore.getState().reset();
   },
 
