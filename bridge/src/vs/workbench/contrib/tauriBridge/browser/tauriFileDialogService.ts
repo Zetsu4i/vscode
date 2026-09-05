@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { IPickAndOpenOptions, IDialogService } from '../../../../platform/dialogs/common/dialogs.js';
+import { IPickAndOpenOptions, ISaveDialogOptions, IOpenDialogOptions, IDialogService } from '../../../../platform/dialogs/common/dialogs.js';
 import { URI } from '../../../../base/common/uri.js';
 import { IWorkspaceContextService } from '../../../../platform/workspace/common/workspace.js';
 import { IInstantiationService } from '../../../../platform/instantiation/common/instantiation.js';
@@ -110,5 +110,55 @@ export class TauriFileDialogService extends FileDialogService {
 
         override async pickFolderAndOpen(options: IPickAndOpenOptions): Promise<void> {
                 return this.pickFileFolderAndOpen(options);
+        }
+
+        override async pickWorkspaceAndOpen(options: IPickAndOpenOptions): Promise<void> {
+                const bridge = TauriBridge.get();
+                if (!bridge) {
+                        return super.pickWorkspaceAndOpen(options);
+                }
+                const path = await bridge.call<string | null>('dialog.pick', 'workspace', options.defaultUri?.fsPath, options.title);
+                if (path) {
+                        return this.hostService.openWindow([{ workspaceUri: URI.file(path) }], { forceNewWindow: options.forceNewWindow, remoteAuthority: options.remoteAuthority });
+                }
+        }
+
+        /**
+         * Save dialog for the text file service (Ctrl+S on untitled editors and
+         * "Save As"). Upstream would use the File System Access API, which does
+         * not exist for a real `file` scheme provider.
+         */
+        override async pickFileToSave(defaultUri: URI, availableFileSystems?: string[]): Promise<URI | undefined> {
+                const bridge = TauriBridge.get();
+                if (!bridge) {
+                        return super.pickFileToSave(defaultUri, availableFileSystems);
+                }
+                const path = await bridge.call<string | null>('dialog.pick', 'save', defaultUri?.fsPath);
+                return path ? URI.file(path) : undefined;
+        }
+
+        override async showSaveDialog(options: ISaveDialogOptions): Promise<URI | undefined> {
+                const bridge = TauriBridge.get();
+                if (!bridge) {
+                        return super.showSaveDialog(options);
+                }
+                const path = await bridge.call<string | null>('dialog.pick', 'save', options.defaultUri?.fsPath, options.title);
+                return path ? URI.file(path) : undefined;
+        }
+
+        override async showOpenDialog(options: IOpenDialogOptions): Promise<URI[] | undefined> {
+                const bridge = TauriBridge.get();
+                if (!bridge) {
+                        return super.showOpenDialog(options);
+                }
+                const foldersOnly = Boolean(options.canSelectFolders) && !Boolean(options.canSelectFiles);
+                const mode = options.canSelectMany ? 'files' : (foldersOnly ? 'folder' : 'file');
+                const filters = options.filters?.map(f => [f.name, f.extensions] as [string, string[]]);
+                const picked = await bridge.call<string | string[] | null>('dialog.pick', mode, options.defaultUri?.fsPath, options.title, filters);
+                if (!picked) {
+                        return undefined; // user cancelled the native dialog
+                }
+                const paths = Array.isArray(picked) ? picked : [picked];
+                return paths.map(p => URI.file(p));
         }
 }
