@@ -56,8 +56,35 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
 
+      # build/npm/preinstall.ts requires a VS C++ toolchain and probes
+      # hardcoded `Microsoft Visual Studio/<2019|2022>/<Edition>` paths. The
+      # runner image ships a newer layout, so resolve the real installation
+      # via vswhere and satisfy the check through `vs2022_install` (the env
+      # var only needs the path to exist — the version is not re-validated).
+      - name: Locate Visual Studio (C/C++ toolchain for node-gyp)
+        shell: pwsh
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          if (-not (Test-Path $vswhere)) { Write-Error "vswhere not found at $vswhere"; exit 1 }
+          $vs = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          if (-not $vs) { Write-Error "no Visual Studio installation with the C++ workload found"; exit 1 }
+          Write-Host "Visual Studio: $vs"
+          "vs2022_install=$vs" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
       - name: Install dependencies
-        run: npm ci --no-audit --no-fund
+        shell: bash
+        env:
+          npm_config_foreground_scripts: 'true'
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -uo pipefail
+          for i in 1 2 3 4 5; do
+            if npm ci --no-audit --no-fund; then exit 0; fi
+            echo "npm ci attempt $i failed; retrying in 5s..."
+            sleep 5
+          done
+          echo "::error::npm ci failed after 5 attempts"
+          exit 1
 
       # Phase 0 guard: the original tree must keep typechecking while the
       # shell is being swapped underneath it.
