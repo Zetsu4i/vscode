@@ -50,6 +50,27 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # The monaco.d.ts build guard (build/lib/compilation.ts) compares the
+      # generated declaration byte-wise against the checked-out file. The
+      # repo normalizes text files to LF (.gitattributes `* text=auto`), but
+      # a CRLF working tree (Windows autocrlf) makes a pristine checkout
+      # fail that comparison. Renormalize the working tree to LF once,
+      # right after checkout.
+      - name: Force LF working tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "core.autocrlf before: $(git config --get core.autocrlf || echo unset)"
+          git config core.autocrlf false
+          git rm --cached -r . -q
+          git reset --hard -q
+          if grep -q $'\r' src/vs/monaco.d.ts; then
+            echo "::error::monaco.d.ts still contains CRLF after renormalization"
+            exit 1
+          fi
+          echo "monaco.d.ts is LF-clean"
+          git status --short | head -5
+
       - name: Setup Node (repo .nvmrc)
         uses: actions/setup-node@v4
         with:
