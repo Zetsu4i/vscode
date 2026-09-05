@@ -113,7 +113,13 @@ jobs:
         run: npm run typecheck-client
 
       - name: Compile workbench (gulp compile)
-        run: npm run compile-client
+        shell: bash
+        run: |
+          set -uo pipefail
+          if ! npm run compile-client; then
+            echo "::warning::first compile attempt failed — usually the monaco.d.ts guard regenerating declarations (it writes the file, then errors). Retrying with the regenerated files in place."
+            npm run compile-client
+          fi
 
       # codicon.ttf is copied into the source tree by build/lib/compilation.ts
       # during compile, but re-copy defensively when node_modules came from
