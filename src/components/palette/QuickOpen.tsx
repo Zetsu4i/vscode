@@ -66,7 +66,7 @@ export default function QuickOpen() {
     }
   }, [open, mode, root]);
 
-  const isCommandMode = mode === "commands" && (input.startsWith(">") || input === "");
+  const isCommandMode = mode !== "themes" && (mode === "commands" || input.startsWith(">"));
   const isThemeMode = mode === "themes";
   const query = isCommandMode ? input.replace(/^>\s*/, "") : input;
 
@@ -186,8 +186,8 @@ export default function QuickOpen() {
             isCommandMode
               ? "Type the name of a command to run"
               : isThemeMode
-                ? "Select Color Theme (Up/Down to preview, Enter to confirm)"
-                : "Search files by name (append : to go to line)"
+                ? "Select Color Theme (Up/Down Keys to Preview, Enter to Confirm)"
+                : "Search files by name (use > for commands)"
           }
           value={input}
           onChange={(e) => setInput(e.target.value)}
@@ -231,6 +231,7 @@ export default function QuickOpen() {
                   onMouseEnter={() => setSelected(i)}
                   onClick={() => accept(i)}
                 >
+                  <i className="codicon codicon-file palette-item-icon" />
                   <span className="palette-item-title">{baseName(r.path)}</span>
                   <span className="palette-item-meta">
                     {root ? relativePath(root, r.path).replace(baseName(r.path), "") : r.path}

@@ -36,7 +36,6 @@ export default function TitleBar() {
   const [menuOpen, setMenuOpen] = useState<string | null>(null);
   const [maximized, setMaximized] = useState(false);
   const barRef = useRef<HTMLDivElement>(null);
-  const root = useWorkspaceStore((s) => s.root);
   const rootName = useWorkspaceStore((s) => s.rootName);
   const activeKey = useEditorStore((s) => s.activeKey);
   const showConfirm = useUiStore((s) => s.showConfirm);
@@ -69,6 +68,28 @@ export default function TitleBar() {
       message: `${feature} lands in a later phase of the rebuild. The workbench, filesystem, search, git, terminal and extension layers are already native.`,
       okLabel: "OK",
     });
+
+  const openLayoutMenu = (e: React.MouseEvent<HTMLButtonElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    useUiStore.getState().openContextMenu(rect.left, rect.bottom + 4, [
+      {
+        label: "Toggle Primary Side Bar",
+        kb: "Ctrl+B",
+        action: () => useUiStore.getState().toggleSidebar(),
+      },
+      {
+        label: "Toggle Panel",
+        kb: "Ctrl+J",
+        action: () => useUiStore.getState().togglePanel(),
+      },
+      { separator: true },
+      {
+        label: "Show All Commands",
+        kb: "Ctrl+Shift+P",
+        action: () => useUiStore.getState().openPalette("commands"),
+      },
+    ]);
+  };
 
   const menus: MenuDef[] = [
     {
@@ -218,7 +239,7 @@ export default function TitleBar() {
     },
   ];
 
-  const title = rootName ? `${rootName} - VSTauri` : "VSTauri";
+  const commandCenterLabel = rootName || "VSTauri";
 
   const renderItems = (items: MenuItemDef[], nested = false) =>
     items.map((it, i) =>
@@ -252,7 +273,6 @@ export default function TitleBar() {
   return (
     <div className="titlebar" data-tauri-drag-region ref={barRef}>
       <div className="titlebar-left" data-tauri-drag-region>
-        <div className="titlebar-logo">{"</>"}</div>
         <div className="titlebar-menubar">
           {menus.map((m) => (
             <div key={m.label} className="menu-wrap">
@@ -275,19 +295,25 @@ export default function TitleBar() {
       </div>
 
       <div className="titlebar-center" data-tauri-drag-region>
-        <span className="titlebar-title">{title}</span>
+        <button
+          className="command-center"
+          title="Search files by name (Ctrl+P)"
+          onClick={() => useUiStore.getState().openPalette("files")}
+        >
+          <i className="codicon codicon-search" />
+          <span className="command-center-label">{commandCenterLabel}</span>
+          <i className="codicon codicon-chevron-down" />
+        </button>
       </div>
 
       <div className="titlebar-right">
-        {!root && (
-          <button
-            className="titlebar-action"
-            title="Open Folder"
-            onClick={() => void pickAndOpenFolder()}
-          >
-            Open Folder
-          </button>
-        )}
+        <button
+          className="titlebar-icon"
+          title="Customize Layout..."
+          onClick={openLayoutMenu}
+        >
+          <i className="codicon codicon-layout" />
+        </button>
         <button
           className="titlebar-btn"
           title="Minimize"

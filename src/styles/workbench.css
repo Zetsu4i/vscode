@@ -6,42 +6,50 @@
    ============================================================ */
 
 :root {
-  /* Fallbacks = Dark+; overridden at runtime by the theme system. */
-  --bg-editor: #1e1e1e;
-  --bg-side: #252526;
-  --bg-activity: #333333;
-  --bg-title: #3c3c3c;
-  --bg-tab: #2d2d2d;
-  --bg-tab-active: #1e1e1e;
-  --bg-panel: #1e1e1e;
-  --bg-input: #3c3c3c;
-  --bg-dropdown: #454545;
+  /* Fallbacks = Dark Modern (the modern VSCode default); overridden at
+     runtime by the theme system. */
+  --bg-editor: #1f1f1f;
+  --bg-side: #181818;
+  --bg-activity: #181818;
+  --bg-title: #181818;
+  --bg-tab: #181818;
+  --bg-tab-active: #1f1f1f;
+  --bg-panel: #181818;
+  --bg-input: #313131;
+  --bg-dropdown: #1f1f1f;
   --bg-hover: #2a2d2e;
   --bg-list-active: #37373d;
-  --bg-widget: #252526;
-  --bg-button: #0e639c;
-  --bg-button-hover: #1177bb;
-  --bg-button-secondary: #3a3d41;
-  --bg-button-secondary-hover: #45494e;
-  --status-bg: #007acc;
-  --status-fg: #ffffff;
+  --bg-widget: #202020;
+  --bg-button: #0078d4;
+  --bg-button-hover: #026ec1;
+  --bg-button-secondary: #313131;
+  --bg-button-secondary-hover: #3c3c3c;
+  --status-bg: #181818;
+  --status-fg: #cccccc;
   --border: #2b2b2b;
   --border-strong: #454545;
   --text: #cccccc;
-  --text-strong: #e7e7e7;
-  --text-muted: #a0a0a0;
+  --text-strong: #ffffff;
+  --text-muted: #9d9d9d;
   --text-dim: #868686;
-  --accent: #007fd4;
-  --focus: #007fd4;
-  --list-focus: #062f4a;
-  --badge-bg: #4d4d4d;
-  --badge-fg: #ffffff;
+  --accent: #0078d4;
+  --focus: #0078d4;
+  --list-focus: #04395e;
+  --badge-bg: #616161;
+  --badge-fg: #f8f8f8;
+  --tab-fg: #ffffff;
+  --tab-inactive-fg: #9d9d9d;
+  --titlebar-border: #2b2b2b;
+  --quick-bg: #222222;
+  --menu-selection: #0078d4;
+  --menu-selection-fg: #ffffff;
+  --input-border: #3c3c3c;
   --list-focus-fg: #ffffff;
   --list-active-fg: #ffffff;
   --hover-weak: rgba(255, 255, 255, 0.08);
-  --hover-strong: rgba(255, 255, 255, 0.1);
-  --activity-inactive: rgba(255, 255, 255, 0.4);
-  --activity-fg: #ffffff;
+  --hover-strong: rgba(241, 241, 241, 0.2);
+  --activity-inactive: #868686;
+  --activity-fg: #d7d7d7;
   --error: #f14c4c;
   --warning: #cca700;
   --link: #3794ff;
@@ -105,7 +113,7 @@ textarea {
   font-size: inherit;
   color: var(--text);
   background: var(--bg-input);
-  border: 1px solid transparent;
+  border: 1px solid var(--input-border);
   outline: none;
 }
 
@@ -165,6 +173,7 @@ textarea:focus {
   align-items: center;
   height: var(--title-height);
   background: var(--bg-title);
+  border-bottom: 1px solid var(--titlebar-border);
   flex-shrink: 0;
   -webkit-app-region: drag;
 }
@@ -179,14 +188,6 @@ textarea:focus {
   align-items: center;
   flex: 1 1 0;
   min-width: 0;
-}
-
-.titlebar-logo {
-  font-family: var(--font-mono);
-  font-weight: 700;
-  color: #29b6f6;
-  font-size: 13px;
-  padding: 0 10px;
 }
 
 .titlebar-menubar {
@@ -236,10 +237,12 @@ textarea:focus {
   width: 100%;
   text-align: left;
   padding: 4px 20px;
+  white-space: nowrap;
 }
 
 .menu-item .menu-item-label {
   flex: 1;
+  white-space: nowrap;
 }
 
 .menu-item .menu-item-kb {
@@ -262,23 +265,63 @@ textarea:focus {
 }
 
 .menu-item:hover {
-  background: var(--list-focus);
-  color: var(--list-focus-fg);
+  background: var(--menu-selection);
+  color: var(--menu-selection-fg);
 }
 
 .menu-item:hover .menu-item-kb {
-  color: var(--list-focus-fg);
+  color: var(--menu-selection-fg);
 }
 
 .menu-item.danger {
   color: #f48771;
 }
 
+/* command center — the centered quick-open pill of the modern VSCode titlebar */
+
 .titlebar-center {
-  flex: 0 0 auto;
+  flex: 0 1 auto;
   display: flex;
   align-items: center;
   justify-content: center;
+  min-width: 0;
+  max-width: 42vw;
+}
+
+.command-center {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 8px;
+  min-width: 180px;
+  max-width: 100%;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  color: var(--text-muted);
+  font-size: 12px;
+  -webkit-app-region: no-drag;
+}
+
+.command-center:hover {
+  background: var(--hover-weak);
+  color: var(--text);
+}
+
+.command-center .codicon-search {
+  font-size: 14px;
+}
+
+.command-center-label {
+  flex: 1;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.command-center .codicon-chevron-down {
+  font-size: 12px;
 }
 
 .titlebar-title {
@@ -298,14 +341,30 @@ textarea:focus {
 .titlebar-action {
   color: var(--text);
   font-size: 12px;
-  border: 1px solid var(--border-strong);
   padding: 2px 10px;
   margin-right: 8px;
   border-radius: 2px;
 }
 
 .titlebar-action:hover {
-  background: var(--hover-weak);
+  background: var(--hover-strong);
+}
+
+.titlebar-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 100%;
+  color: var(--text);
+}
+
+.titlebar-icon .codicon {
+  font-size: 16px;
+}
+
+.titlebar-icon:hover {
+  background: var(--hover-strong);
 }
 
 .titlebar-btn {
@@ -876,11 +935,21 @@ textarea:focus {
   height: 35px;
   padding: 0 10px;
   background: var(--bg-tab);
-  border-right: 1px solid #252526;
+  border-left: 1px solid var(--border);
   cursor: pointer;
   white-space: nowrap;
   flex-shrink: 0;
   position: relative;
+}
+
+.tab:first-child,
+.tab.active,
+.tab.active + .tab {
+  border-left-color: transparent;
+}
+
+.tab:hover {
+  background: var(--bg-tab-active);
 }
 
 .tab.active {
@@ -900,11 +969,17 @@ textarea:focus {
 .tab-icon {
   font-size: 16px;
   margin-right: 6px;
-  color: var(--text);
+  color: var(--tab-inactive-fg);
 }
 
 .tab-label {
   font-size: 13px;
+  color: var(--tab-inactive-fg);
+}
+
+.tab.active .tab-icon,
+.tab.active .tab-label {
+  color: var(--tab-fg);
 }
 
 .tab-dirty {
@@ -948,6 +1023,41 @@ textarea:focus {
 .monaco-container {
   position: absolute;
   inset: 0;
+}
+
+/* breadcrumbs */
+
+.breadcrumbs {
+  display: flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 16px;
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  background: var(--bg-editor);
+}
+
+.breadcrumbs-seg {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.breadcrumbs-seg .codicon {
+  font-size: 14px;
+}
+
+.breadcrumbs-sep {
+  font-size: 14px;
+  margin: 0 4px;
+  color: var(--text-dim);
+}
+
+.breadcrumbs-seg:last-child {
+  color: var(--text);
 }
 
 /* welcome page */
@@ -1067,16 +1177,6 @@ textarea:focus {
   white-space: nowrap;
 }
 
-.welcome-watermark {
-  font-family: var(--font-mono);
-  font-size: 140px;
-  font-weight: 700;
-  color: var(--hover-weak);
-  text-align: center;
-  margin-top: 40px;
-  pointer-events: none;
-}
-
 /* binary file view */
 
 .binary-view {
@@ -1153,8 +1253,8 @@ textarea:focus {
 }
 
 .panel-tab.active {
-  color: #e7e7e7;
-  border-bottom-color: #e7e7e7;
+  color: var(--text);
+  border-bottom-color: var(--accent);
 }
 
 .panel-actions {
@@ -1193,12 +1293,12 @@ textarea:focus {
   flex: 1;
   min-width: 0;
   position: relative;
-  padding: 0 0 0 10px;
+  padding: 0 0 0 20px;
 }
 
 .terminal-instance {
   position: absolute;
-  inset: 0 0 6px 0;
+  inset: 0 0 8px 0;
 }
 
 .terminal-empty {
@@ -1399,7 +1499,8 @@ textarea:focus {
   transform: translateX(-50%);
   width: 600px;
   max-width: 90vw;
-  background: var(--bg-widget);
+  background: var(--quick-bg);
+  border: 1px solid var(--border-strong);
   border-radius: 6px;
   box-shadow: 0 5px 16px rgba(0, 0, 0, 0.55);
   margin-top: 6px;
@@ -1409,12 +1510,12 @@ textarea:focus {
 .palette-input {
   width: 100%;
   height: 30px;
-  padding: 0 10px;
-  background: var(--bg-input);
-  border: 1px solid var(--focus);
-  border-radius: 4px;
-  margin: 6px;
-  width: calc(100% - 12px);
+  padding: 0 12px;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  margin: 0;
 }
 
 .palette-list {
@@ -1429,6 +1530,16 @@ textarea:focus {
   height: 22px;
   padding: 0 12px;
   cursor: pointer;
+}
+
+.palette-item-icon {
+  font-size: 14px;
+  margin-right: 6px;
+  color: var(--text-dim);
+}
+
+.palette-item.selected .palette-item-icon {
+  color: var(--list-focus-fg);
 }
 
 .palette-item.selected {
@@ -1488,6 +1599,13 @@ textarea:focus {
 .input-dialog .palette-input {
   margin: 4px 6px;
   width: calc(100% - 12px);
+  background: var(--bg-input);
+  border: 1px solid var(--input-border);
+  border-radius: 2px;
+}
+
+.input-dialog .palette-input:focus {
+  border-color: var(--focus);
 }
 
 /* ---------- modal ---------- */

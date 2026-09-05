@@ -42,8 +42,11 @@ export default function ContextMenu() {
               item.action?.();
             }}
           >
-            <i className={`codicon ${item.icon ?? "codicon-chevron-right"}`} style={{ width: 16 }} />
-            <span>{item.label}</span>
+            {item.icon ? (
+              <i className={`codicon ${item.icon}`} style={{ width: 16 }} />
+            ) : null}
+            <span className="menu-item-label">{item.label}</span>
+            {item.kb && <span className="menu-item-kb">{item.kb}</span>}
           </button>
         )
       )}

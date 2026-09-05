@@ -187,6 +187,13 @@ const DARK_PLUS_UI: Record<string, string> = {
   "list-active-fg": "#ffffff",
   "badge-bg": "#4d4d4d",
   "badge-fg": "#ffffff",
+  "tab-fg": "#ffffff",
+  "tab-inactive-fg": "#969696",
+  "titlebar-border": "#333333",
+  "quick-bg": "#252526",
+  "menu-selection": "#094771",
+  "menu-selection-fg": "#ffffff",
+  "input-border": "#3c3c3c",
   "hover-weak": "rgba(255,255,255,0.08)",
   "hover-strong": "rgba(255,255,255,0.10)",
   "activity-inactive": "rgba(255,255,255,0.40)",
@@ -267,7 +274,7 @@ export const DARK_MODERN: WorkbenchTheme = {
     "bg-input": "#313131",
     "bg-dropdown": "#1f1f1f",
     "bg-hover": "#2a2d2e",
-    "bg-list-active": "#37373d",
+    "bg-list-active": "#04395e",
     "bg-widget": "#202020",
     "bg-button": "#0078d4",
     "bg-button-hover": "#026ec1",
@@ -288,6 +295,13 @@ export const DARK_MODERN: WorkbenchTheme = {
     "list-active-fg": "#ffffff",
     "badge-bg": "#616161",
     "badge-fg": "#f8f8f8",
+    "tab-fg": "#ffffff",
+    "tab-inactive-fg": "#9d9d9d",
+    "titlebar-border": "#2b2b2b",
+    "quick-bg": "#222222",
+    "menu-selection": "#0078d4",
+    "menu-selection-fg": "#ffffff",
+    "input-border": "#3c3c3c",
     "hover-weak": "rgba(255,255,255,0.08)",
     "hover-strong": "rgba(241,241,241,0.20)",
     "activity-inactive": "#868686",
@@ -379,6 +393,13 @@ const LIGHT_PLUS_UI: Record<string, string> = {
   "list-active-fg": "#1f1f1f",
   "badge-bg": "#c4c4c4",
   "badge-fg": "#333333",
+  "tab-fg": "#333333",
+  "tab-inactive-fg": "#6f6f6f",
+  "titlebar-border": "#c8c8c8",
+  "quick-bg": "#f3f3f3",
+  "menu-selection": "#0060c0",
+  "menu-selection-fg": "#ffffff",
+  "input-border": "#cecece",
   "hover-weak": "rgba(0,0,0,0.06)",
   "hover-strong": "rgba(0,0,0,0.10)",
   "activity-inactive": "rgba(255,255,255,0.40)",
@@ -472,6 +493,13 @@ export const LIGHT_MODERN: WorkbenchTheme = {
     "list-focus-fg": "#000000",
     "badge-bg": "#cccccc",
     "badge-fg": "#3b3b3b",
+    "tab-fg": "#3b3b3b",
+    "tab-inactive-fg": "#868686",
+    "titlebar-border": "#e5e5e5",
+    "quick-bg": "#f8f8f8",
+    "menu-selection": "#005fb8",
+    "menu-selection-fg": "#ffffff",
+    "input-border": "#cecece",
     "hover-weak": "rgba(31,31,31,0.07)",
     "hover-strong": "rgba(31,31,31,0.11)",
     "activity-inactive": "#616161",
@@ -558,6 +586,13 @@ export const MONOKAI: WorkbenchTheme = {
     "list-active-fg": "#f8f8f2",
     "badge-bg": "#75715e",
     "badge-fg": "#f8f8f2",
+    "tab-fg": "#f8f8f2",
+    "tab-inactive-fg": "#a6a69b",
+    "titlebar-border": "#1e1f1c",
+    "quick-bg": "#1e1f1c",
+    "menu-selection": "#75715e",
+    "menu-selection-fg": "#f8f8f2",
+    "input-border": "#414339",
     "hover-weak": "rgba(248,248,242,0.08)",
     "hover-strong": "rgba(248,248,242,0.12)",
     "activity-inactive": "rgba(248,248,242,0.45)",
@@ -667,24 +702,24 @@ export const MONOKAI: WorkbenchTheme = {
 /* ------------------------------------------------------------------ */
 
 export const THEMES: WorkbenchTheme[] = [
-  DARK_PLUS,
   DARK_MODERN,
-  LIGHT_PLUS,
+  DARK_PLUS,
   LIGHT_MODERN,
+  LIGHT_PLUS,
   MONOKAI,
 ];
 
 const THEME_STORAGE_KEY = "vstauri.colorTheme";
 
 export function getTheme(id: string): WorkbenchTheme {
-  return THEMES.find((t) => t.id === id) ?? DARK_PLUS;
+  return THEMES.find((t) => t.id === id) ?? DARK_MODERN;
 }
 
 export function getStoredThemeId(): string {
   try {
-    return localStorage.getItem(THEME_STORAGE_KEY) ?? DARK_PLUS.id;
+    return localStorage.getItem(THEME_STORAGE_KEY) ?? DARK_MODERN.id;
   } catch {
-    return DARK_PLUS.id;
+    return DARK_MODERN.id;
   }
 }
 

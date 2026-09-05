@@ -74,7 +74,6 @@ export default function Welcome() {
                 </div>
               ))}
             </div>
-            <div className="welcome-watermark">{"</>"}</div>
           </div>
         </div>
       </div>

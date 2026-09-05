@@ -143,7 +143,7 @@ export const SETTINGS: SettingDef[] = [
     description: "Specifies the color theme used in the workbench.",
     category: "Workbench",
     type: "enum",
-    default: "dark-plus",
+    default: "dark-modern",
     options: THEMES.map((t) => ({ value: t.id, label: t.label })),
   },
 ];

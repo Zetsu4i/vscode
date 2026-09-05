@@ -39,6 +39,7 @@ const savedView: SidebarView = (["explorer", "search", "git", "extensions"] as c
 export interface MenuItem {
   label?: string;
   icon?: string;
+  kb?: string;
   action?: () => void;
   danger?: boolean;
   separator?: boolean;
