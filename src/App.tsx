@@ -6,7 +6,7 @@ import { useWorkspaceStore } from "./state/workspaceStore";
 import { useEditorStore } from "./state/editorStore";
 import { useTerminalStore } from "./state/terminalStore";
 import { useSearchStore } from "./state/searchStore";
-import { onFsChanged, onSearchProgress, onSearchDone } from "./ipc";
+import { ipc, onFsChanged, onSearchProgress, onSearchDone } from "./ipc";
 import { baseName } from "./util/paths";
 
 import TitleBar from "./components/titlebar/TitleBar";
@@ -37,6 +37,56 @@ export default function App() {
       void unFs.then((f) => f());
       void unProg.then((f) => f());
       void unDone.then((f) => f());
+    };
+  }, []);
+
+  // Window-state: the window starts hidden (visible:false in tauri.conf.json)
+  // so the backend can restore its saved geometry before anything is shown.
+  // After the first painted frame we reveal the window (no white flash), then
+  // keep saving geometry (debounced) as the user resizes/moves it.
+  useEffect(() => {
+    const win = getCurrentWindow();
+    const raf = requestAnimationFrame(() => {
+      void ipc.windowReady().catch(() => {
+        /* window already visible (dev mode) */
+      });
+    });
+
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let disposed = false;
+    const save = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(async () => {
+        if (disposed) return;
+        try {
+          if (await win.isMaximized()) return; // keep last normal geometry
+          const [scale, size, pos] = await Promise.all([
+            win.scaleFactor(),
+            win.outerSize(),
+            win.outerPosition(),
+          ]);
+          if (!scale) return;
+          await ipc.saveWindowState({
+            width: size.width / scale,
+            height: size.height / scale,
+            x: pos.x / scale,
+            y: pos.y / scale,
+            maximized: false,
+          });
+        } catch {
+          /* transient API errors are fine */
+        }
+      }, 350);
+    };
+    const unsubs: Array<() => void> = [];
+    void win.onResized(save).then((f) => unsubs.push(f));
+    void win.onMoved(save).then((f) => unsubs.push(f));
+
+    return () => {
+      disposed = true;
+      cancelAnimationFrame(raf);
+      if (timer) clearTimeout(timer);
+      unsubs.forEach((f) => f());
     };
   }, []);
 

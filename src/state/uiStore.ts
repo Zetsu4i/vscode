@@ -3,6 +3,39 @@ import { applyTheme, getStoredThemeId } from "../theme/themes";
 
 export type SidebarView = "explorer" | "search" | "git" | "extensions";
 
+// ---- layout persistence (restore-before-show: applied on first render) ----
+
+const LS_LAYOUT = "vstauri.layout";
+
+interface PersistedLayout {
+  view: SidebarView;
+  sidebarVisible: boolean;
+  sidebarWidth: number;
+  panelVisible: boolean;
+  panelHeight: number;
+  panelTab: "terminal" | "problems";
+}
+
+function clamp(n: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, n));
+}
+
+function loadLayout(): Partial<PersistedLayout> {
+  try {
+    const raw = localStorage.getItem(LS_LAYOUT);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+const savedLayout = loadLayout();
+const savedView: SidebarView = (["explorer", "search", "git", "extensions"] as const).includes(
+  savedLayout.view as SidebarView
+)
+  ? (savedLayout.view as SidebarView)
+  : "explorer";
+
 export interface MenuItem {
   label?: string;
   icon?: string;
@@ -70,13 +103,13 @@ interface UiState {
 }
 
 export const useUiStore = create<UiState>((set, get) => ({
-  view: "explorer",
+  view: savedView,
   themeId: getStoredThemeId(),
-  sidebarVisible: true,
-  sidebarWidth: 300,
-  panelVisible: false,
-  panelHeight: 280,
-  panelTab: "terminal",
+  sidebarVisible: savedLayout.sidebarVisible ?? true,
+  sidebarWidth: clamp(savedLayout.sidebarWidth ?? 300, 170, 640),
+  panelVisible: savedLayout.panelVisible ?? false,
+  panelHeight: clamp(savedLayout.panelHeight ?? 280, 120, 1000),
+  panelTab: savedLayout.panelTab === "problems" ? "problems" : "terminal",
   paletteOpen: false,
   paletteMode: "files",
   contextMenu: null,
@@ -113,3 +146,25 @@ export const useUiStore = create<UiState>((set, get) => ({
   requestReveal: (path, line, col) =>
     set({ reveal: { path, line, col, token: Date.now() } }),
 }));
+
+// Debounced layout persistence: saved ~250ms after the last layout change,
+// applied synchronously on the next startup (before the window is shown).
+let layoutTimer: ReturnType<typeof setTimeout> | null = null;
+useUiStore.subscribe((s) => {
+  if (layoutTimer) clearTimeout(layoutTimer);
+  layoutTimer = setTimeout(() => {
+    const l: PersistedLayout = {
+      view: s.view,
+      sidebarVisible: s.sidebarVisible,
+      sidebarWidth: s.sidebarWidth,
+      panelVisible: s.panelVisible,
+      panelHeight: s.panelHeight,
+      panelTab: s.panelTab,
+    };
+    try {
+      localStorage.setItem(LS_LAYOUT, JSON.stringify(l));
+    } catch {
+      /* storage full/unavailable — layout just won't persist */
+    }
+  }, 250);
+});
