@@ -7,6 +7,8 @@ import { useEditorStore } from "./state/editorStore";
 import { useTerminalStore } from "./state/terminalStore";
 import { useSearchStore } from "./state/searchStore";
 import { ipc, onFsChanged, onSearchProgress, onSearchDone } from "./ipc";
+import { initSettingsAppliers } from "./settings/appliers";
+import { useSettingsStore } from "./settings/settingsStore";
 import { baseName } from "./util/paths";
 
 import TitleBar from "./components/titlebar/TitleBar";
@@ -25,10 +27,16 @@ export default function App() {
   // Restore last workspace + wire global backend events
   useEffect(() => {
     void useWorkspaceStore.getState().initFromSaved();
+    // Settings: appliers first (they subscribe), then load — user/workspace
+    // settings.json drive editor options, theme and auto save from boot.
+    initSettingsAppliers();
+    void useSettingsStore.getState().load();
 
-    const unFs = onFsChanged(() => {
+    const unFs = onFsChanged((paths) => {
       void useWorkspaceStore.getState().refreshAll();
       void useGitStoreRefresh();
+      // Editing settings.json in the editor must live-reload the engine.
+      void useSettingsStore.getState().maybeReload(paths);
     });
     const unProg = onSearchProgress((p) => useSearchStore.getState().setProgress(p));
     const unDone = onSearchDone((p) => useSearchStore.getState().finish(p));
@@ -96,7 +104,9 @@ export default function App() {
       const rootName = useWorkspaceStore.getState().rootName;
       const active = state.tabs.find((t) => t.key === state.activeKey);
       const parts: string[] = [];
-      if (active) parts.push(baseName(active.path));
+      if (active) {
+        parts.push(active.kind === "settings" ? "Settings" : baseName(active.path));
+      }
       if (rootName) parts.push(rootName);
       parts.push("VSTauri");
       void getCurrentWindow().setTitle(parts.join(" - "));

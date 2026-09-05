@@ -87,7 +87,12 @@ export default function TitleBar() {
         {
           label: "Preferences",
           children: [
+            { label: "Settings", kb: "Ctrl+,", action: () => runCommand("workbench.action.openSettings") },
             { label: "Color Theme...", kb: "Ctrl+K Ctrl+T", action: () => useUiStore.getState().openPalette("themes") },
+            { label: "", separator: true },
+            { label: "Open User Settings (JSON)", action: () => runCommand("workbench.action.openSettingsJson") },
+            { label: "Open Workspace Settings (JSON)", action: () => runCommand("workbench.action.openWorkspaceSettingsJson") },
+            { label: "", separator: true },
             { label: "Keyboard Shortcuts", action: comingSoon("Keyboard Shortcuts editor") },
           ],
         },

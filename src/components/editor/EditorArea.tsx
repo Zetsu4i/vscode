@@ -3,6 +3,7 @@ import TabBar from "./TabBar";
 import MonacoPane from "./MonacoPane";
 import DiffPane from "./DiffPane";
 import ImagePane, { isImage } from "./ImagePane";
+import SettingsPane from "../settings/SettingsPane";
 import Welcome from "./Welcome";
 
 export default function EditorArea() {
@@ -15,6 +16,7 @@ export default function EditorArea() {
     <div className="editor-area">
       <TabBar />
       <div className="editor-body">
+        {active?.kind === "settings" && <SettingsPane />}
         {active?.kind === "file" && isImage(active.path) && (
           <ImagePane key={active.path} path={active.path} />
         )}

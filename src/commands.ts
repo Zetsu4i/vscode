@@ -223,6 +223,41 @@ export const commands: Command[] = [
     run: () => useUiStore.getState().openPalette("themes"),
   },
   {
+    id: "workbench.action.openSettings",
+    title: "Open Settings (UI)",
+    category: "Preferences",
+    keybinding: "Ctrl+,",
+    run: () => useEditorStore.getState().openSettings(),
+  },
+  {
+    id: "workbench.action.openSettingsJson",
+    title: "Open User Settings (JSON)",
+    category: "Preferences",
+    run: async () => {
+      const { ipc } = await import("./ipc");
+      const p = await ipc.settingsPath("user", null);
+      useEditorStore.getState().openFile(p);
+    },
+  },
+  {
+    id: "workbench.action.openWorkspaceSettingsJson",
+    title: "Open Workspace Settings (JSON)",
+    category: "Preferences",
+    run: async () => {
+      const root = useWorkspaceStore.getState().root;
+      if (!root) {
+        useUiStore.getState().showConfirm({
+          title: "No folder open",
+          message: "Open a folder first to edit workspace settings.",
+        });
+        return;
+      }
+      const { ipc } = await import("./ipc");
+      const p = await ipc.settingsPath("workspace", root);
+      useEditorStore.getState().openFile(p);
+    },
+  },
+  {
     id: "workbench.action.togglePanel",
     title: "Toggle Panel",
     category: "View",

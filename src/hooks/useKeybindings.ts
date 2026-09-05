@@ -122,6 +122,10 @@ export function useKeybindings(): void {
           e.preventDefault();
           runCommand("editor.action.commentLine");
           break;
+        case ",":
+          e.preventDefault();
+          runCommand("workbench.action.openSettings");
+          break;
         case "s":
           e.preventDefault();
           void useEditorStore.getState().save();
