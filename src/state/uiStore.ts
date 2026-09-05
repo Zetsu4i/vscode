@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { applyTheme, getStoredThemeId } from "../theme/themes";
 
 export type SidebarView = "explorer" | "search" | "git" | "extensions";
 
@@ -33,13 +34,14 @@ export interface RevealRequest {
 
 interface UiState {
   view: SidebarView;
+  themeId: string;
   sidebarVisible: boolean;
   sidebarWidth: number;
   panelVisible: boolean;
   panelHeight: number;
   panelTab: "terminal" | "problems";
   paletteOpen: boolean;
-  paletteMode: "files" | "commands";
+  paletteMode: "files" | "commands" | "themes";
   contextMenu: { x: number; y: number; items: MenuItem[] } | null;
   inputDialog: InputDialogState | null;
   confirmDialog: ConfirmDialogState | null;
@@ -48,12 +50,13 @@ interface UiState {
   reveal: RevealRequest | null;
 
   setView: (v: SidebarView) => void;
+  setTheme: (id: string) => void;
   toggleSidebar: () => void;
   setSidebarWidth: (w: number) => void;
   togglePanel: () => void;
   setPanelHeight: (h: number) => void;
   setPanelTab: (t: "terminal" | "problems") => void;
-  openPalette: (mode: "files" | "commands") => void;
+  openPalette: (mode: "files" | "commands" | "themes") => void;
   closePalette: () => void;
   openContextMenu: (x: number, y: number, items: MenuItem[]) => void;
   closeContextMenu: () => void;
@@ -68,6 +71,7 @@ interface UiState {
 
 export const useUiStore = create<UiState>((set, get) => ({
   view: "explorer",
+  themeId: getStoredThemeId(),
   sidebarVisible: true,
   sidebarWidth: 300,
   panelVisible: false,
@@ -83,6 +87,10 @@ export const useUiStore = create<UiState>((set, get) => ({
   reveal: null,
 
   setView: (v) => set({ view: v, sidebarVisible: true }),
+  setTheme: (id) => {
+    applyTheme(id, true);
+    set({ themeId: id });
+  },
   toggleSidebar: () => set((s) => ({ sidebarVisible: !s.sidebarVisible })),
   setSidebarWidth: (w) => set({ sidebarWidth: Math.min(640, Math.max(170, w)) }),
   togglePanel: () => set((s) => ({ panelVisible: !s.panelVisible })),

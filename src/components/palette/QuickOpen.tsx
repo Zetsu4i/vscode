@@ -5,6 +5,7 @@ import { useEditorStore } from "../../state/editorStore";
 import { ipc } from "../../ipc";
 import { commands, runCommand } from "../../commands";
 import { baseName, relativePath } from "../../util/paths";
+import { THEMES, applyTheme, getTheme } from "../../theme/themes";
 
 /** Simple subsequence fuzzy score — higher is better, null = no match. */
 function fuzzyScore(text: string, query: string): number | null {
@@ -41,6 +42,8 @@ export default function QuickOpen() {
   const open = useUiStore((s) => s.paletteOpen);
   const mode = useUiStore((s) => s.paletteMode);
   const close = useUiStore((s) => s.closePalette);
+  const themeId = useUiStore((s) => s.themeId);
+  const setTheme = useUiStore((s) => s.setTheme);
   const [input, setInput] = useState("");
   const [files, setFiles] = useState<string[] | null>(null);
   const [selected, setSelected] = useState(0);
@@ -63,8 +66,26 @@ export default function QuickOpen() {
     }
   }, [open, mode, root]);
 
-  const isCommandMode = input.startsWith(">") || (input === "" && mode === "commands");
+  const isCommandMode = mode === "commands" && (input.startsWith(">") || input === "");
+  const isThemeMode = mode === "themes";
   const query = isCommandMode ? input.replace(/^>\s*/, "") : input;
+
+  // Live theme preview: arrowing through the list applies the theme
+  // immediately (without persisting) — exactly like VSCode's picker.
+  const themeResults = useMemo(() => {
+    if (!isThemeMode) return [];
+    return THEMES.filter((t) =>
+      query ? t.label.toLowerCase().includes(query.toLowerCase()) : true
+    );
+  }, [isThemeMode, query]);
+
+  useEffect(() => {
+    if (!isThemeMode || !open) return;
+    const t = themeResults[selected];
+    if (t) applyTheme(t.id, false);
+  }, [isThemeMode, open, selected, themeResults]);
+
+  const activeThemeId = isThemeMode ? getTheme(themeId).id : null;
 
   const fileResults = useMemo<FileResult[]>(() => {
     if (isCommandMode || !files) return [];
@@ -92,7 +113,11 @@ export default function QuickOpen() {
       .slice(0, 60);
   }, [query, isCommandMode]);
 
-  const resultCount = isCommandMode ? commandResults.length : fileResults.length;
+  const resultCount = isCommandMode
+    ? commandResults.length
+    : isThemeMode
+      ? themeResults.length
+      : fileResults.length;
 
   useEffect(() => {
     setSelected(0);
@@ -106,6 +131,14 @@ export default function QuickOpen() {
   if (!open) return null;
 
   const accept = (index: number) => {
+    if (isThemeMode) {
+      const t = themeResults[index];
+      if (t) {
+        setTheme(t.id);
+        close();
+      }
+      return;
+    }
     if (isCommandMode) {
       const item = commandResults[index];
       if (item) {
@@ -133,6 +166,8 @@ export default function QuickOpen() {
       accept(selected);
     } else if (e.key === "Escape") {
       e.preventDefault();
+      // Revert the live preview back to the committed theme.
+      if (isThemeMode) applyTheme(getTheme(themeId).id, false);
       close();
     }
   };
@@ -148,7 +183,11 @@ export default function QuickOpen() {
           ref={inputRef}
           className="palette-input"
           placeholder={
-            isCommandMode ? "Type the name of a command to run" : "Search files by name (append : to go to line)"
+            isCommandMode
+              ? "Type the name of a command to run"
+              : isThemeMode
+                ? "Select Color Theme (Up/Down to preview, Enter to confirm)"
+                : "Search files by name (append : to go to line)"
           }
           value={input}
           onChange={(e) => setInput(e.target.value)}
@@ -156,7 +195,21 @@ export default function QuickOpen() {
           spellCheck={false}
         />
         <div className="palette-list" ref={listRef}>
-          {isCommandMode
+          {isThemeMode
+            ? themeResults.map((t, i) => (
+                <div
+                  key={t.id}
+                  className={`palette-item ${i === selected ? "selected" : ""}`}
+                  onMouseEnter={() => setSelected(i)}
+                  onClick={() => accept(i)}
+                >
+                  <span className="palette-item-title">{t.label}</span>
+                  <span className="palette-item-meta">
+                    {t.id === activeThemeId ? "active" : t.kind}
+                  </span>
+                </div>
+              ))
+            : isCommandMode
             ? commandResults.map((r, i) => (
                 <div
                   key={r.cmd.id}

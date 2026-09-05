@@ -4,19 +4,27 @@ import { FitAddon } from "@xterm/addon-fit";
 import { onPtyOutput, onPtyExit } from "../../ipc";
 import { useTerminalStore, Term } from "../../state/terminalStore";
 import { useUiStore } from "../../state/uiStore";
-import { XTERM_DARK_PLUS } from "../../theme/darkplus";
+import { getTheme } from "../../theme/themes";
 
 function TerminalInstance({ term }: { term: Term }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const activeId = useTerminalStore((s) => s.activeId);
   const isActive = activeId === term.id;
+  const themeId = useUiStore((s) => s.themeId);
+  const termRef = useRef<Terminal | null>(null);
+
+  // Live theme switching — mirrors VSCode's terminal.integrated integration.
+  useEffect(() => {
+    const t = termRef.current;
+    if (t) t.options.theme = getTheme(themeId).xterm;
+  }, [themeId]);
 
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
 
     const t = new Terminal({
-      theme: XTERM_DARK_PLUS,
+      theme: getTheme(themeId).xterm,
       fontSize: 14,
       fontFamily: 'Consolas, "Courier New", "Droid Sans Mono", monospace',
       cursorBlink: true,
@@ -26,6 +34,7 @@ function TerminalInstance({ term }: { term: Term }) {
     const fit = new FitAddon();
     t.loadAddon(fit);
     t.open(host);
+    termRef.current = t;
     try {
       fit.fit();
     } catch {
@@ -65,6 +74,7 @@ function TerminalInstance({ term }: { term: Term }) {
 
     return () => {
       ro.disconnect();
+      termRef.current = null;
       dataSub.dispose();
       resizeSub.dispose();
       void unlistenOut.then((f) => f());
