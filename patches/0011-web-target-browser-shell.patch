@@ -1,0 +1,20 @@
+diff --git a/build/next/index.ts b/build/next/index.ts
+index defbaa1b..8c20cfbb 100644
+--- a/build/next/index.ts
++++ b/build/next/index.ts
+@@ -183,6 +183,7 @@ function getEntryPointsForTarget(target: BuildTarget): string[] {
+ 				...workerEntryPoints,
+ 				...webOnlyEntryPoints,
+ 				'vs/workbench/workbench.web.main.internal', // web workbench only (no browser shell)
++				'vs/code/browser/workbench/workbench', // browser shell bootstrap (needed by local/serve-web style servers)
+ 				...keyboardMapEntryPoints,
+ 			];
+ 		default:
+@@ -229,6 +230,7 @@ function getCssBundleEntryPointsForTarget(target: BuildTarget): Set<string> {
+ 		case 'web':
+ 			return new Set([
+ 				'vs/workbench/workbench.web.main.internal',
++				'vs/code/browser/workbench/workbench',
+ 				'vs/sessions/sessions.web.main.internal',
+ 			]);
+ 		default:

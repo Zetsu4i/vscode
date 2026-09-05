@@ -25,6 +25,31 @@ workbench).
 Total: 17 inserted lines, 1 modified line. Everything else in upstream stays
 byte-identical.
 
+### 0011-web-target-browser-shell.patch
+
+Target: `build/next/index.ts` (the esbuild bundler used by the
+`vscode-web-ci` gulp task).
+
+Upstream's `web` esbuild target bundles only
+`vs/workbench/workbench.web.main.internal` — it is meant for vscode.dev's
+external-shell hosting. The `server-web` target (what official
+`code serve-web` serves from) additionally bundles the browser shell
+bootstrap `vs/code/browser/workbench/workbench` and bundles its CSS. Our
+backbone serves the workbench exactly like `webClientServer.ts` does, whose
+template (`out/vs/code/browser/workbench/workbench.html`) references
+`workbench.js` and `workbench.css` — without this patch both 404 and the
+window stays blank (this was the "installed exe shows nothing" bug, verified
+against the dev-5 artifact).
+
+1. Add `'vs/code/browser/workbench/workbench'` to the `web` target entry
+   points (same as `server-web` already has).
+2. Add it to the `web` target CSS bundle entry set so `workbench.css` is
+   emitted next to it.
+
+Total: 2 inserted lines. Verified locally: bundling this entry on top of the
+dev-5 artifact boots the genuine workbench (welcome page renders, extension
+host starts) in a headless browser.
+
 ## Regenerating
 
 After editing upstream files inside `upstream/` (never commit them there):
