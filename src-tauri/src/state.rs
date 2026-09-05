@@ -49,6 +49,32 @@ pub fn log(msg: &str) {
     }
 }
 
+// ---------------------------------------------------------------------------
+// last opened folder — persisted so the app reopens the previous workspace on
+// launch, desktop-style. Stored as a plain fsPath string (e.g. `C:/dev/proj`).
+// ---------------------------------------------------------------------------
+
+static LAST_FOLDER_PATH: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+
+/// Install the persistence file location (call once at boot).
+pub fn init_last_folder(path: PathBuf) {
+    let _ = LAST_FOLDER_PATH.set(path);
+}
+
+pub fn load_last_folder() -> Option<String> {
+    let p = LAST_FOLDER_PATH.get()?;
+    std::fs::read_to_string(p)
+        .ok()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+}
+
+pub fn store_last_folder(folder: &str) {
+    if let Some(p) = LAST_FOLDER_PATH.get() {
+        let _ = std::fs::write(p, folder);
+    }
+}
+
 pub struct AppState {
     /// Per-session random token; every bridge call and websocket must present it.
     pub token: String,
@@ -62,6 +88,8 @@ pub struct AppState {
     pub events: tokio::sync::broadcast::Sender<String>,
     pub ptys: Mutex<HashMap<u32, PtyEntry>>,
     pub watchers: Mutex<HashMap<u32, WatcherEntry>>,
+    /// Folder opened in the current/last session (fsPath); mirrored to disk.
+    pub last_folder: Mutex<Option<String>>,
     next_watch_id: std::sync::atomic::AtomicU32,
     shutting_down: AtomicBool,
 }
@@ -103,6 +131,7 @@ impl AppState {
             events,
             ptys: Mutex::new(HashMap::new()),
             watchers: Mutex::new(HashMap::new()),
+            last_folder: Mutex::new(load_last_folder()),
             next_watch_id: std::sync::atomic::AtomicU32::new(1),
             shutting_down: AtomicBool::new(false),
         }))

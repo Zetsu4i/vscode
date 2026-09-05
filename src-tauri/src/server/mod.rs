@@ -106,7 +106,30 @@ fn default_candidates() -> Vec<std::path::PathBuf> {
 /// still boot the workbench well within this budget.
 const BOOT_WATCHDOG: &str = r#"(function(){var e=[];window.addEventListener('error',function(ev){e.push(String((ev&&ev.message)||'error'));});window.addEventListener('unhandledrejection',function(){e.push('unhandledrejection');});setTimeout(function(){if(document.querySelector('.monaco-workbench'))return;var p=document.createElement('pre');p.style.cssText='position:fixed;left:0;right:0;bottom:0;z-index:2147483647;margin:0;padding:10px 14px;background:#181818;color:#d7d7d7;font:12px/1.5 monospace;white-space:pre-wrap;border-top:1px solid #454545';p.textContent='VSTauri: workbench did not finish starting.\nerrors: '+(e.length?e.join(' | '):'none captured');(document.body||document.documentElement).appendChild(p);},15000);})();"#;
 
-async fn workbench(AxState(state): AxState<SharedState>) -> Response {
+async fn workbench(
+    AxState(state): AxState<SharedState>,
+    AxQuery(query): AxQuery<HashMap<String, String>>,
+) -> Response {
+    // The client workspace is communicated through the URL, exactly like the
+    // official server does: `?folder=<uri>` / `?workspace=<uri>` / `?ew=true`.
+    // `WorkspaceProvider` (vs/code/browser/workbench/workbench.ts) parses these
+    // client-side and navigates here when a folder is opened from the dialogs.
+    let folder_param = query.get("folder").cloned();
+    let has_workspace_query =
+        folder_param.is_some() || query.contains_key("workspace") || query.contains_key("ew");
+
+    if let Some(uri) = folder_param {
+        if let Some(fs_path) = uri_string_to_fs_path(&uri) {
+            let mut last = state.last_folder.lock().unwrap();
+            if last.as_deref() != Some(fs_path.as_str()) {
+                crate::state::log(&format!("workspace: open folder {fs_path}"));
+            }
+            *last = Some(fs_path.clone());
+            drop(last);
+            crate::state::store_last_folder(&fs_path);
+        }
+    }
+
     let path = state.client_dir.join(WORKBENCH_HTML);
     let template = match std::fs::read_to_string(&path) {
         Ok(t) => t,
@@ -134,6 +157,21 @@ async fn workbench(AxState(state): AxState<SharedState>) -> Response {
         "productConfiguration": product,
         "callbackRoute": "/"
     });
+
+    // Session restore: when the page is loaded without an explicit workspace
+    // in the URL (app launch), re-open the last used folder — desktop-style.
+    let mut config = config;
+    if !has_workspace_query {
+        let last = state.last_folder.lock().unwrap().clone();
+        if let Some(folder) = last {
+            if std::path::Path::new(&folder).is_dir() {
+                config["folderUri"] = serde_json::json!({
+                    "scheme": "file",
+                    "path": format!("/{}", folder.replace('\\', "/"))
+                });
+            }
+        }
+    }
 
     let platform = if cfg!(target_os = "windows") {
         "windows"
@@ -229,6 +267,47 @@ fn html_attribute_encode(s: &str) -> String {
         .replace('\'', "&#39;")
         .replace('<', "&lt;")
         .replace('>', "&gt;")
+}
+
+/// `file:///C:/a/b` -> `C:/a/b` (authority-free local URI only).
+/// Percent sequences in the path are decoded; a lowercase drive letter is
+/// normalized to uppercase for tidier logs/persistence.
+fn uri_string_to_fs_path(uri: &str) -> Option<String> {
+    let rest = uri.strip_prefix("file://")?;
+    let (authority, path) = rest.split_once('/')?;
+    if !authority.is_empty() {
+        return None; // remote authority — not a local folder
+    }
+    let decoded = percent_decode(path)?;
+    if decoded.is_empty() {
+        return None;
+    }
+    // lowercase drive letter (vscode URIs use `/c:/`) -> `C:/`
+    let bytes = decoded.as_bytes();
+    if bytes.len() >= 2 && bytes[1] == b':' && bytes[0].is_ascii_lowercase() {
+        let mut d = decoded.into_bytes();
+        d[0] = d[0].to_ascii_uppercase();
+        return String::from_utf8(d).ok();
+    }
+    Some(decoded)
+}
+
+fn percent_decode(s: &str) -> Option<String> {
+    let bytes = s.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%' && i + 2 < bytes.len() {
+            let hi = (bytes[i + 1] as char).to_digit(16)?;
+            let lo = (bytes[i + 2] as char).to_digit(16)?;
+            out.push(((hi * 16) + lo) as u8);
+            i += 3;
+        } else {
+            out.push(bytes[i]);
+            i += 1;
+        }
+    }
+    String::from_utf8(out).ok()
 }
 
 fn random_hex(len: usize) -> String {

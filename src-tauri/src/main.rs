@@ -30,6 +30,7 @@ fn main() {
             // Release builds have no console — everything goes to the log.
             if let Ok(dir) = app.path().app_data_dir() {
                 state::init_log(dir.join("vstauri.log"));
+                state::init_last_folder(dir.join("last_folder.txt"));
             }
 
             // Resolve the vscode-web client directory before anything else.
