@@ -1,0 +1,192 @@
+name: Windows NSIS Release
+
+# Per AGENTS.md hard constraint 1: all product work happens on the
+# `tauri-rewrite` branch ONLY — `main` remains the pristine upstream
+# baseline this branch was cut from. Never merge or copy from other
+# branches (tauri-rebuild, copilot/*, arena/*, ...).
+#
+# Phase-gated design (ROADMAP.md Phase 0+):
+#   1. verify-baseline — always runs: proves the fork's original
+#      Electron/TypeScript tree still compiles on Windows before any
+#      shell work lands (Phase 0 acceptance).
+#   2. shell-check — detects when the Phase 1 Tauri shell lands.
+#   3. bundle-windows — NSIS bundle (constraint 9: NSIS only,
+#      constraint 11: native WebView2 shell, no vscode-web/server
+#      hosting). Automatically skipped until `src-tauri/tauri.conf.json`
+#      exists, so CI stays green during Phase 0.
+#   4. release — publishes every successful bundle as a prerelease.
+#
+# Note: `workflow_dispatch` only becomes selectable in the Actions UI
+# once this file also exists on the default branch; push triggers on
+# `tauri-rewrite` work from the first commit that adds this file.
+
+on:
+  push:
+    branches:
+      - tauri-rewrite
+    paths-ignore:
+      - '**.md'
+  workflow_dispatch:
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # Compile-only baseline: the Electron binary and Playwright browsers are
+  # not needed to compile the workbench. Native WebView2 tooling needed by
+  # the Phase 1+ bundle is handled inside src-tauri.
+  ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+  PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # 1. Baseline guard (ROADMAP Phase 0): the fork's original TypeScript tree
+  #    must still compile on Windows. Runs on every push so regressions
+  #    caused by shell work are caught before anything ships. This uses the
+  #    repo's own scripts (`typecheck-client`, `compile-client`) so the CI
+  #    can never drift from what developers run locally.
+  # ---------------------------------------------------------------------------
+  verify-baseline:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node (repo .nvmrc)
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Typecheck full src tree
+        run: npm run typecheck-client
+
+      - name: Compile workbench (baseline smoke)
+        run: npm run compile-client
+
+      # Phase 1+ will hook in here: upload the compiled `out/` renderer
+      # payload and hand it to bundle-windows as the native WebView2
+      # frontend of the Tauri shell (no server, no vscode-web build).
+
+  # ---------------------------------------------------------------------------
+  # 2. Gate: is the Phase 1+ Tauri shell present on this branch yet?
+  # ---------------------------------------------------------------------------
+  shell-check:
+    runs-on: ubuntu-latest
+    outputs:
+      present: ${{ steps.check.outputs.present }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check for src-tauri shell
+        id: check
+        run: |
+          if [ -f src-tauri/tauri.conf.json ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  # ---------------------------------------------------------------------------
+  # 3. Windows NSIS bundle (Tauri v2, WebView2). Only target per AGENTS.md
+  #    constraint 9. Rust deps, the tauri-cli binary and the NSIS tooling
+  #    are all cached. Skipped automatically until the Phase 1 shell lands.
+  # ---------------------------------------------------------------------------
+  bundle-windows:
+    needs: [verify-baseline, shell-check]
+    if: needs.shell-check.outputs.present == 'true'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Phase 1+ will download the compiled workbench payload here and
+      # place it where src-tauri expects it (ROADMAP Phase 1).
+
+      - name: Install Rust (stable, cached)
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          key: windows
+
+      - name: Cache tauri-cli binary
+        id: tacli
+        uses: actions/cache@v4
+        with:
+          path: ~\.cargo\bin\cargo-tauri.exe
+          key: tauri-cli-v2-windows-stable
+
+      - name: Install tauri-cli
+        if: steps.tacli.outputs.cache-hit != 'true'
+        run: cargo install tauri-cli --version '^2' --locked
+
+      - name: Cache NSIS tooling
+        uses: actions/cache@v4
+        with:
+          path: ~\AppData\Local\tauri
+          key: tauri-nsis-windows-v1
+
+      # Constraint 9: Windows NSIS only — no MSI/Wix/Mac/Linux bundling.
+      # Constraint 11: the bundle loads the original workbench renderer
+      # natively in WebView2 — no vscode-web build, no background HTTP
+      # server hosting the workbench.
+      - name: Build Windows bundle (NSIS only)
+        shell: bash
+        run: |
+          if [ -f src-tauri/tauri.windows.conf.json ]; then
+            cargo tauri build --config src-tauri/tauri.windows.conf.json
+          else
+            cargo tauri build
+          fi
+
+      # TODO (Phase 1+): end-to-end smoke test of the built app — launch the
+      # exe, assert the workbench renders in WebView2, then publish.
+
+      - name: Upload Windows installer (NSIS)
+        uses: actions/upload-artifact@v4
+        with:
+          name: installers-windows
+          path: src-tauri/target/release/bundle/nsis/*-setup.exe
+          retention-days: 7
+          if-no-files-found: error
+
+  # ---------------------------------------------------------------------------
+  # 4. Release every successful bundle
+  # ---------------------------------------------------------------------------
+  release:
+    needs: [verify-baseline, shell-check, bundle-windows]
+    if: ${{ always() && needs.bundle-windows.result == 'success' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download installer
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          pattern: installers-*
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: dev-${{ github.run_number }}
+          name: "Dev build ${{ github.run_number }}"
+          body: |
+            Automated build of `${{ github.sha }}` on `tauri-rewrite`.
+
+            - **Windows**: `*-setup.exe` (NSIS)
+
+            Native Tauri v2 shell (WebView2) bundling the original VS Code
+            workbench renderer. The Electron main process is being replaced
+            phase-by-phase; the extension host runs as a Node.js sidecar.
+          prerelease: true
+          files: |
+            dist/**/*.exe
