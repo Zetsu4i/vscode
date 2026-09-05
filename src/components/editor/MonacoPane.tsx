@@ -5,6 +5,7 @@ import { useEditorStore } from "../../state/editorStore";
 import { useUiStore } from "../../state/uiStore";
 import { useWorkspaceStore } from "../../state/workspaceStore";
 import { languageForPath } from "../../util/paths";
+import { setActiveEditor } from "../../editorBridge";
 
 // ---- module-level singletons ----------------------------------------------
 
@@ -234,7 +235,6 @@ export default function MonacoPane({ path }: { path: string }) {
     if (!editor && containerRef.current) {
       editor = monaco.editor.create(containerRef.current, {
         model: null,
-        theme: "dark-plus",
         automaticLayout: true,
         fontSize: 14,
         fontFamily:
@@ -259,6 +259,10 @@ export default function MonacoPane({ path }: { path: string }) {
           .getState()
           .setCursor(e.position.lineNumber, e.position.column);
       });
+
+      // Expose the editor to the menu bar / command layer.
+      setActiveEditor(editor);
+      editor.onDidFocusEditorText(() => setActiveEditor(editor));
     }
 
     if (!diagnosticsListenerBound) {

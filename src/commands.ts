@@ -1,9 +1,19 @@
 import { open } from "@tauri-apps/plugin-dialog";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { useUiStore } from "./state/uiStore";
 import { useWorkspaceStore } from "./state/workspaceStore";
 import { useEditorStore } from "./state/editorStore";
 import { useTerminalStore } from "./state/terminalStore";
 import { useSearchStore } from "./state/searchStore";
+import {
+  editorAction,
+  editorFind,
+  editorFormat,
+  editorGoToLineCol,
+  editorRedo,
+  editorReplace,
+  editorUndo,
+} from "./editorBridge";
 
 export interface Command {
   id: string;
@@ -11,6 +21,19 @@ export interface Command {
   category: string;
   keybinding?: string;
   run: () => void | Promise<void>;
+}
+
+/* Window zoom (borrowed from SideX's approach: webview zoom instead of
+   per-element scaling) with VSCode-style bounded steps. */
+let zoomFactor = 1;
+
+async function setZoom(factor: number): Promise<void> {
+  zoomFactor = Math.min(3, Math.max(0.5, factor));
+  try {
+    await getCurrentWebview().setZoom(zoomFactor);
+  } catch (e) {
+    console.error("zoom failed", e);
+  }
 }
 
 async function pickAndOpenFolder(): Promise<void> {
@@ -191,6 +214,90 @@ export const commands: Command[] = [
     title: "Git: Refresh",
     category: "Git",
     run: () => useWorkspaceStore.getState() && useUiStore.getState().setView("git"),
+  },
+  {
+    id: "workbench.action.selectTheme",
+    title: "Color Theme",
+    category: "Preferences",
+    keybinding: "Ctrl+K Ctrl+T",
+    run: () => useUiStore.getState().openPalette("themes"),
+  },
+  {
+    id: "workbench.action.togglePanel",
+    title: "Toggle Panel",
+    category: "View",
+    keybinding: "Ctrl+J",
+    run: () => useUiStore.getState().togglePanel(),
+  },
+  {
+    id: "workbench.action.zoomIn",
+    title: "Zoom In",
+    category: "View",
+    keybinding: "Ctrl+=",
+    run: () => void setZoom(zoomFactor + 0.1),
+  },
+  {
+    id: "workbench.action.zoomOut",
+    title: "Zoom Out",
+    category: "View",
+    keybinding: "Ctrl+-",
+    run: () => void setZoom(zoomFactor - 0.1),
+  },
+  {
+    id: "workbench.action.zoomReset",
+    title: "Reset Zoom",
+    category: "View",
+    keybinding: "Ctrl+0",
+    run: () => void setZoom(1),
+  },
+  {
+    id: "edit.action.undo",
+    title: "Undo",
+    category: "Edit",
+    keybinding: "Ctrl+Z",
+    run: editorUndo,
+  },
+  {
+    id: "edit.action.redo",
+    title: "Redo",
+    category: "Edit",
+    keybinding: "Ctrl+Y",
+    run: editorRedo,
+  },
+  {
+    id: "actions.find",
+    title: "Find",
+    category: "Edit",
+    keybinding: "Ctrl+F",
+    run: editorFind,
+  },
+  {
+    id: "editor.action.startFindReplaceAction",
+    title: "Replace",
+    category: "Edit",
+    keybinding: "Ctrl+H",
+    run: editorReplace,
+  },
+  {
+    id: "editor.action.formatDocument",
+    title: "Format Document",
+    category: "Edit",
+    keybinding: "Shift+Alt+F",
+    run: editorFormat,
+  },
+  {
+    id: "editor.action.gotoLine",
+    title: "Go to Line/Column...",
+    category: "Go",
+    keybinding: "Ctrl+G",
+    run: editorGoToLineCol,
+  },
+  {
+    id: "editor.action.commentLine",
+    title: "Toggle Line Comment",
+    category: "Edit",
+    keybinding: "Ctrl+/",
+    run: () => editorAction("editor.action.commentLine"),
   },
   {
     id: "workbench.action.reloadWindow",

@@ -70,6 +70,11 @@ export function useKeybindings(): void {
         runCommand("workbench.panel.problems");
         return;
       }
+      if (shift && key === "x") {
+        e.preventDefault();
+        runCommand("workbench.view.extensions");
+        return;
+      }
       if (shift && (key === "`" || key === "~")) {
         e.preventDefault();
         runCommand("workbench.action.terminal.new");
@@ -85,6 +90,37 @@ export function useKeybindings(): void {
         case "b":
           e.preventDefault();
           runCommand("workbench.action.toggleSidebar");
+          break;
+        case "j":
+          e.preventDefault();
+          runCommand("workbench.action.togglePanel");
+          break;
+        case "g":
+          e.preventDefault();
+          runCommand("editor.action.gotoLine");
+          break;
+        case "=":
+        case "+":
+          e.preventDefault();
+          runCommand("workbench.action.zoomIn");
+          break;
+        case "-":
+          e.preventDefault();
+          runCommand("workbench.action.zoomOut");
+          break;
+        case "0":
+          e.preventDefault();
+          runCommand("workbench.action.zoomReset");
+          break;
+        case "h":
+          if (!isTextInput(e.target)) {
+            e.preventDefault();
+            runCommand("editor.action.startFindReplaceAction");
+          }
+          break;
+        case "/":
+          e.preventDefault();
+          runCommand("editor.action.commentLine");
           break;
         case "s":
           e.preventDefault();
