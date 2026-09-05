@@ -376,3 +376,24 @@ web extensions work today. Node extensions cannot run in the webview yet.
   `windows-nsis-release.yml` replaces ci.yml (NSIS-only, auto-release,
   boot-file regression guards). Linux bundling paused pending explicit
   approval per AGENTS.md constraint 8.
+- 2026-09-05 (later): **Branch policy corrected + raw-HTML window bug
+  fixed.** The maintainer clarified constraint 1: `main` is the pristine
+  `microsoft/vscode` mirror they branch from for experiments — the product
+  line lives on `tauri-rebuild`. `main` was restored to upstream
+  `1.136.1` (`a44adf7f`) and all product commits + the workflow now target
+  `tauri-rebuild` exclusively. The "window shows raw HTML source" bug had
+  two server-side root causes: (1) the axum workbench handler returned
+  `String`, whose default content type is `text/plain`, so WebView2
+  rendered the HTML as literal text; the handler now serves
+  `text/html; charset=utf-8`. (2) The injected `globalThis.__VSTAURI__`
+  was a hand-rolled `format!` that emitted literal `{{...}}` — a JS syntax
+  error that killed the bridge bootstrap; the object is now serialized
+  with `serde_json`. Hardening: visible on-page boot-failure watchdog,
+  file logging (`vstauri.log` in the app data dir) because release builds
+  have no console, fast-fail boot-file assertions in `main.rs`, and a
+  headless `--vstauri-smoke` mode that CI uses to assert content types +
+  injected config + boot files against the freshly built binary before
+  release. CI now runs on `tauri-rebuild` only and caches the client
+  build (keyed on upstream pin + patches + bridge), Rust deps
+  (`rust-cache`), the `cargo-tauri` binary and NSIS tooling — repeat
+  builds drop from ~50 min to a fraction of that.

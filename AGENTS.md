@@ -23,9 +23,10 @@ Preserve, while replacing the Electron shell with Tauri v2:
 
 ## Hard constraints
 
-1. **`main` branch only.** Development happens on `main`; never inspect,
-   merge, or copy from any other branch (frozen history branches like
-   `tauri-rebuild` are references, not sources).
+1. **`tauri-rebuild` branch only.** ALL product development, commits and
+   CI happen on `tauri-rebuild`. `main` is the pristine `microsoft/vscode`
+   mirror the maintainer branches from for their own experiments — never
+   push product commits to `main`, never trigger workflows from it.
 2. **Do not redesign the UI.** Keep the original workbench, Monaco editor,
    CSS, icons, layout, and renderer code. If you are writing workbench
    UI code (React/HTML/CSS), STOP — you are hallucinating.
