@@ -61,13 +61,28 @@ fn build_router(state: SharedState) -> Router {
 // client location
 // ---------------------------------------------------------------------------
 
-const WORKBENCH_HTML: &str = "out/vs/code/browser/workbench/workbench.html";
+pub const WORKBENCH_HTML: &str = "out/vs/code/browser/workbench/workbench.html";
 
 pub fn resolve_client_dir(app: &tauri::AppHandle) -> Option<std::path::PathBuf> {
     let mut candidates: Vec<std::path::PathBuf> = Vec::new();
     if let Ok(rd) = app.path().resource_dir() {
         candidates.push(rd.join("client"));
     }
+    candidates.extend(default_candidates());
+    candidates
+        .into_iter()
+        .find(|p| p.join(WORKBENCH_HTML).is_file())
+}
+
+/// Client-dir resolution without a Tauri app context (smoke mode).
+pub fn resolve_client_dir_generic() -> Option<std::path::PathBuf> {
+    default_candidates()
+        .into_iter()
+        .find(|p| p.join(WORKBENCH_HTML).is_file())
+}
+
+fn default_candidates() -> Vec<std::path::PathBuf> {
+    let mut candidates: Vec<std::path::PathBuf> = Vec::new();
     if let Ok(exe) = std::env::current_exe() {
         if let Some(dir) = exe.parent() {
             candidates.push(dir.join("client"));
@@ -79,13 +94,17 @@ pub fn resolve_client_dir(app: &tauri::AppHandle) -> Option<std::path::PathBuf> 
         candidates.push(cwd.join("upstream/../vscode-web"));
     }
     candidates
-        .into_iter()
-        .find(|p| p.join(WORKBENCH_HTML).is_file())
 }
 
 // ---------------------------------------------------------------------------
 // workbench page
 // ---------------------------------------------------------------------------
+
+/// Rendered a visible banner if the workbench never reaches a running state
+/// (the "blank window" failure mode) — release builds have no console, so
+/// without this the only symptom was an empty page. 15s: slow disks/machines
+/// still boot the workbench well within this budget.
+const BOOT_WATCHDOG: &str = r#"(function(){var e=[];window.addEventListener('error',function(ev){e.push(String((ev&&ev.message)||'error'));});window.addEventListener('unhandledrejection',function(){e.push('unhandledrejection');});setTimeout(function(){if(document.querySelector('.monaco-workbench'))return;var p=document.createElement('pre');p.style.cssText='position:fixed;left:0;right:0;bottom:0;z-index:2147483647;margin:0;padding:10px 14px;background:#181818;color:#d7d7d7;font:12px/1.5 monospace;white-space:pre-wrap;border-top:1px solid #454545';p.textContent='VSTauri: workbench did not finish starting.\nerrors: '+(e.length?e.join(' | '):'none captured');(document.body||document.documentElement).appendChild(p);},15000);})();"#;
 
 async fn workbench(AxState(state): AxState<SharedState>) -> Response {
     let path = state.client_dir.join(WORKBENCH_HTML);
@@ -124,14 +143,22 @@ async fn workbench(AxState(state): AxState<SharedState>) -> Response {
         "linux"
     };
 
+    // Built by the JSON serializer so the emitted object literal is always
+    // valid JavaScript. (A hand-rolled format! here once emitted literal
+    // {{...}} — a syntax error that silently killed the bridge bootstrap.)
+    let vstauri = serde_json::json!({
+        "token": state.token.as_str(),
+        "version": env!("CARGO_PKG_VERSION"),
+        "upstreamVersion": upstream_version,
+        "upstreamCommit": product.get("commit").and_then(Value::as_str).unwrap_or(""),
+        "platform": platform,
+    });
+
     let inject = format!(
-        "<script nonce=\"{nonce}\">globalThis.__VSTAURI__={{{{token:'{token}',version:'{ver}',upstreamVersion:'{uver}',upstreamCommit:'{ucom}',platform:'{plat}'}}}};</script>",
+        "<script nonce=\"{nonce}\">globalThis.__VSTAURI__={vstauri};{watchdog}</script>",
         nonce = nonce,
-        token = state.token,
-        ver = env!("CARGO_PKG_VERSION"),
-        uver = upstream_version,
-        ucom = product.get("commit").and_then(Value::as_str).unwrap_or(""),
-        plat = platform,
+        vstauri = vstauri,
+        watchdog = BOOT_WATCHDOG,
     );
 
     // server-side rendering, exactly like webClientServer.ts does upstream
@@ -154,7 +181,17 @@ async fn workbench(AxState(state): AxState<SharedState>) -> Response {
         .replace("{{WORKBENCH_NLS_URL}}", "/out/nls.messages.js");
 
     let csp = create_workbench_content_security_policy(&nonce);
-    let mut res = html.into_response();
+    // axum's IntoResponse for `String` defaults to `text/plain` — WebView2
+    // would then render the HTML source as literal text (the "window full of
+    // HTML" bug). Serve the workbench as HTML explicitly.
+    let mut res = (
+        [(
+            header::CONTENT_TYPE,
+            header::HeaderValue::from_static("text/html; charset=utf-8"),
+        )],
+        html,
+    )
+        .into_response();
     res.headers_mut().insert(
         header::CONTENT_SECURITY_POLICY,
         header::HeaderValue::from_str(&csp).expect("csp header"),
@@ -256,7 +293,14 @@ async fn static_files(AxState(state): AxState<SharedState>, uri: Uri) -> Respons
             )
                 .into_response()
         }
-        Err(_) => (StatusCode::NOT_FOUND, "Not found").into_response(),
+        Err(_) => {
+            crate::state::log(&format!(
+                "404 {} (client dir: {})",
+                uri.path(),
+                state.client_dir.display()
+            ));
+            (StatusCode::NOT_FOUND, "Not found").into_response()
+        }
     }
 }
 
