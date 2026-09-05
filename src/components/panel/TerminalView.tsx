@@ -4,6 +4,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { onPtyOutput, onPtyExit, ipc, ShellInfo } from "../../ipc";
 import { useTerminalStore, Term } from "../../state/terminalStore";
 import { useUiStore, MenuItem } from "../../state/uiStore";
+import { useSettingsStore } from "../../settings/settingsStore";
 import { getTheme } from "../../theme/themes";
 
 function TerminalInstance({ term }: { term: Term }) {
@@ -12,6 +13,7 @@ function TerminalInstance({ term }: { term: Term }) {
   const isActive = activeId === term.id;
   const themeId = useUiStore((s) => s.themeId);
   const termRef = useRef<Terminal | null>(null);
+  const fitRef = useRef<FitAddon | null>(null);
 
   // Live theme switching — mirrors VSCode's terminal.integrated integration.
   useEffect(() => {
@@ -19,20 +21,39 @@ function TerminalInstance({ term }: { term: Term }) {
     if (t) t.options.theme = getTheme(themeId).xterm;
   }, [themeId]);
 
+  // Live settings: terminal font follows terminal.integrated.* immediately.
+  useEffect(() => {
+    const unsub = useSettingsStore.subscribe(() => {
+      const t = termRef.current;
+      if (!t) return;
+      const s = useSettingsStore.getState();
+      t.options.fontSize = s.get<number>("terminal.integrated.fontSize");
+      t.options.fontFamily = s.get<string>("terminal.integrated.fontFamily");
+      try {
+        fitRef.current?.fit();
+      } catch {
+        /* zero-size host */
+      }
+    });
+    return () => unsub();
+  }, []);
+
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
 
+    const settings = useSettingsStore.getState();
     const t = new Terminal({
       theme: getTheme(themeId).xterm,
-      fontSize: 14,
-      fontFamily: 'Consolas, "Courier New", "Droid Sans Mono", monospace',
+      fontSize: settings.get<number>("terminal.integrated.fontSize"),
+      fontFamily: settings.get<string>("terminal.integrated.fontFamily"),
       cursorBlink: true,
       allowProposedApi: true,
       scrollback: 5000,
     });
     const fit = new FitAddon();
     t.loadAddon(fit);
+    fitRef.current = fit;
     t.open(host);
     termRef.current = t;
     try {
@@ -99,6 +120,7 @@ function TerminalInstance({ term }: { term: Term }) {
     return () => {
       ro.disconnect();
       termRef.current = null;
+      fitRef.current = null;
       dataSub.dispose();
       resizeSub.dispose();
       if (ackTimer) clearTimeout(ackTimer);

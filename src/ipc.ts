@@ -61,6 +61,13 @@ export interface WindowState {
   maximized: boolean;
 }
 
+export interface SettingsFileInfo {
+  path: string;
+  /** sanitized (JSONC-stripped) — valid JSON, ready for JSON.parse */
+  text: string;
+  exists: boolean;
+}
+
 export interface ExtensionManifest {
   id: string;
   name: string;
@@ -130,6 +137,14 @@ export const ipc = {
   setAssetRoots: (roots: string[]) => invoke<void>("set_asset_roots", { roots }),
   saveWindowState: (st: WindowState) => invoke<void>("save_window_state", { state: st }),
   windowReady: () => invoke<void>("window_ready"),
+
+  // settings (user + workspace scopes, JSONC-tolerant on the Rust side)
+  settingsRead: (scope: "user" | "workspace", root?: string | null) =>
+    invoke<SettingsFileInfo>("settings_read", { scope, root: root ?? null }),
+  settingsWrite: (scope: "user" | "workspace", root: string | null, text: string) =>
+    invoke<void>("settings_write", { scope, root: root ?? null, text }),
+  settingsPath: (scope: "user" | "workspace", root?: string | null) =>
+    invoke<string>("settings_path", { scope, root: root ?? null }),
 
   // search
   searchWorkspace: (

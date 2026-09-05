@@ -6,6 +6,7 @@ import { useUiStore } from "../../state/uiStore";
 import { useWorkspaceStore } from "../../state/workspaceStore";
 import { languageForPath } from "../../util/paths";
 import { setActiveEditor } from "../../editorBridge";
+import { registerEditor } from "../../settings/appliers";
 
 // ---- module-level singletons ----------------------------------------------
 
@@ -263,6 +264,9 @@ export default function MonacoPane({ path }: { path: string }) {
       // Expose the editor to the menu bar / command layer.
       setActiveEditor(editor);
       editor.onDidFocusEditorText(() => setActiveEditor(editor));
+
+      // Register with the settings layer (applies editor.* immediately).
+      registerEditor(editor);
     }
 
     if (!diagnosticsListenerBound) {

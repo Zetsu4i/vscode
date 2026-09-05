@@ -123,6 +123,11 @@ export const useUiStore = create<UiState>((set, get) => ({
   setTheme: (id) => {
     applyTheme(id, true);
     set({ themeId: id });
+    // Keep settings.json as the source of truth (both scopes resolve to the
+    // same picker). Dynamic import avoids an eval-time cycle with appliers.
+    void import("../settings/settingsStore")
+      .then(({ useSettingsStore }) => useSettingsStore.getState().set("workbench.colorTheme", id))
+      .catch(() => {});
   },
   toggleSidebar: () => set((s) => ({ sidebarVisible: !s.sidebarVisible })),
   setSidebarWidth: (w) => set({ sidebarWidth: Math.min(640, Math.max(170, w)) }),

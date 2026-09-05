@@ -18,6 +18,7 @@ mod gitcmd;
 mod lsp;
 mod pty;
 mod search;
+mod settings;
 mod watcher;
 mod winstate;
 
@@ -75,6 +76,10 @@ pub fn run() {
             lsp::lsp_hover,
             // extensions
             ext::list_extensions,
+            // settings
+            settings::settings_read,
+            settings::settings_write,
+            settings::settings_path,
             // assets + window state
             asset::set_asset_roots,
             winstate::save_window_state,

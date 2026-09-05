@@ -1,8 +1,9 @@
 import { create } from "zustand";
 import { ipc } from "../ipc";
 import { baseName } from "../util/paths";
+import { useSettingsStore } from "../settings/settingsStore";
 
-export type TabKind = "file" | "diff";
+export type TabKind = "file" | "diff" | "settings";
 
 export interface OpenTab {
   key: string; // path for files, "diff:<path>" for diffs
@@ -40,6 +41,7 @@ interface EditorState {
 
   openFile: (path: string) => Promise<void>;
   openDiff: (path: string) => Promise<void>;
+  openSettings: () => void;
   closeTab: (key: string) => void;
   closeAll: () => void;
   setActive: (key: string) => void;
@@ -54,6 +56,32 @@ interface EditorState {
 
 function tabKey(path: string): string {
   return path;
+}
+
+export const SETTINGS_TAB_KEY = "__settings__";
+
+// ---- auto save (files.autoSave: afterDelay) --------------------------------
+
+const autoSaveTimers = new Map<string, number>();
+
+function scheduleAutoSave(path: string): void {
+  const settings = useSettingsStore.getState();
+  if (settings.get<string>("files.autoSave") !== "afterDelay") return;
+  const delay = Math.max(1, settings.get<number>("files.autoSaveDelay"));
+  window.clearTimeout(autoSaveTimers.get(path));
+  autoSaveTimers.set(
+    path,
+    window.setTimeout(() => {
+      autoSaveTimers.delete(path);
+      const st = useEditorStore.getState();
+      if (st.buffers[path]?.dirty) void st.save(path);
+    }, delay)
+  );
+}
+
+function cancelAutoSave(path: string): void {
+  window.clearTimeout(autoSaveTimers.get(path));
+  autoSaveTimers.delete(path);
 }
 
 export const useEditorStore = create<EditorState>((set, get) => ({
@@ -114,6 +142,21 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     }
   },
 
+  openSettings: () => {
+    const existing = get().tabs.find((t) => t.key === SETTINGS_TAB_KEY);
+    if (existing) {
+      set({ activeKey: SETTINGS_TAB_KEY });
+      return;
+    }
+    set((s) => ({
+      tabs: [
+        ...s.tabs,
+        { key: SETTINGS_TAB_KEY, kind: "settings", path: SETTINGS_TAB_KEY },
+      ],
+      activeKey: SETTINGS_TAB_KEY,
+    }));
+  },
+
   closeTab: (key) => {
     set((s) => {
       const tabs = s.tabs.filter((t) => t.key !== key);
@@ -142,6 +185,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         },
       };
     });
+    if (get().buffers[path]?.dirty) scheduleAutoSave(path);
   },
 
   markSaved: (path) => {
@@ -166,6 +210,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     try {
       await ipc.writeFile(target, buf.text);
       get().markSaved(target);
+      cancelAutoSave(target);
       return true;
     } catch (e) {
       console.error("save failed", e);
@@ -224,6 +269,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 }));
 
 export function tabLabel(tab: OpenTab): string {
+  if (tab.kind === "settings") return "Settings";
   const name = baseName(tab.path);
   return tab.kind === "diff" ? `${name} (Working Tree)` : name;
 }
