@@ -50,13 +50,30 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Compiled-output cache (the big speed lever for this pipeline). Exact
+      # key only — no restore-keys, because a partial or stale out/ would
+      # poison every downstream step. The key covers the complete compile
+      # input surface: renderer sources, build pipeline scripts, npm
+      # manifests and the pinned node version. The shell-transplant work
+      # lives in src-tauri/ and .github/, so src/** is normally UNCHANGED
+      # between pushes: typecheck + the ~15 min gulp compile are skipped
+      # entirely. A full compile only runs when renderer inputs actually
+      # change, and its result is saved for the next run.
+      - name: Restore compiled out/ cache
+        id: compile-cache
+        uses: actions/cache@v4
+        with:
+          path: out
+          key: compile-out-win-v1-${{ hashFiles('src/**', 'build/**', 'package.json', 'package-lock.json', '.nvmrc', 'gulpfile.js') }}
+
       # The monaco.d.ts build guard (build/lib/compilation.ts) compares the
       # generated declaration byte-wise against the checked-out file. The
       # repo normalizes text files to LF (.gitattributes `* text=auto`), but
       # a CRLF working tree (Windows autocrlf) makes a pristine checkout
       # fail that comparison. Renormalize the working tree to LF once,
-      # right after checkout.
+      # right after checkout. Only needed when a compile will actually run.
       - name: Force LF working tree
+        if: steps.compile-cache.outputs.cache-hit != 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -91,7 +108,9 @@ jobs:
       # runner image ships a newer layout, so resolve the real installation
       # via vswhere and satisfy the check through `vs2022_install` (the env
       # var only needs the path to exist — the version is not re-validated).
+      # Only needed when npm ci will actually run (node_modules cache miss).
       - name: Locate Visual Studio (C/C++ toolchain for node-gyp)
+        if: steps.cache-node-modules.outputs.cache-hit != 'true'
         shell: pwsh
         run: |
           $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
@@ -123,18 +142,21 @@ jobs:
 
       # postinstall normally downloads electron.d.ts into .build/typings/
       # (OUTSIDE node_modules, so the node_modules cache never carries it).
-      # On cache hits npm ci is skipped, so install the typings explicitly —
-      # idempotent, checksum-guarded, ~100KB download.
+      # Only needed when the typechecker will run (compile inputs changed).
       - name: Ensure electron typings
+        if: steps.compile-cache.outputs.cache-hit != 'true'
         shell: bash
         run: node build/npm/electronTypes.ts
 
       # Phase 0 guard: the original tree must keep typechecking while the
-      # shell is being swapped underneath it.
+      # shell is being swapped underneath it. Skipped when out/ was restored
+      # from cache: identical compile inputs cannot yield a new type error.
       - name: Typecheck full src tree
+        if: steps.compile-cache.outputs.cache-hit != 'true'
         run: npm run typecheck-client
 
       - name: Compile workbench (gulp compile)
+        if: steps.compile-cache.outputs.cache-hit != 'true'
         shell: bash
         run: |
           set -uo pipefail
@@ -142,6 +164,18 @@ jobs:
             echo "::warning::first compile attempt failed — usually the monaco.d.ts guard regenerating declarations (it writes the file, then errors). Retrying with the regenerated files in place."
             npm run compile-client
           fi
+
+      - name: Save compiled out/ cache
+        if: steps.compile-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: out
+          key: compile-out-win-v1-${{ hashFiles('src/**', 'build/**', 'package.json', 'package-lock.json', '.nvmrc', 'gulpfile.js') }}
+
+      - name: Compile cache hit
+        if: steps.compile-cache.outputs.cache-hit == 'true'
+        shell: bash
+        run: echo "::notice::out/ restored from cache (src unchanged) — typecheck and compile skipped"; ls out | head -10
 
       # codicon.ttf is copied into the source tree by build/lib/compilation.ts
       # during compile, but re-copy defensively when node_modules came from

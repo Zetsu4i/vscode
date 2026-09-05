@@ -66,21 +66,48 @@ fn main() {
 
             // Same document Electron loads for the desktop workbench, served
             // natively by the vscode-file protocol handler.
+            //
+            // CRITICAL: the authority MUST be `localhost`. On Windows wry maps
+            // custom-scheme navigations onto `http://<scheme>.<authority>` via
+            // its WebResourceRequested workaround, so this document ends up at
+            // origin `http://vscode-file.localhost` — the only host form Tauri
+            // v2's `is_local_url` accepts as LOCAL (`http://<scheme>.localhost`).
+            // With any other authority (e.g. `vscode-app`) the origin counts as
+            // REMOTE and every invoke() from the preload shim is silently
+            // rejected by the IPC ACL ("Command not allowed") — which is exactly
+            // what produced the blank white window of the first Phase 1 build.
             let url = tauri::WebviewUrl::External(
-                "vscode-file://vscode-app/out/vs/code/electron-browser/workbench/workbench.html"
+                "vscode-file://localhost/out/vs/code/electron-browser/workbench/workbench.html"
                     .parse()
                     .map_err(|err| -> Box<dyn std::error::Error> { Box::new(err) })?,
             );
 
-            let _window = tauri::WebviewWindowBuilder::new(app, "main", url)
+            let window = tauri::WebviewWindowBuilder::new(app, "main", url)
                 .title("Visual Studio Code")
                 .inner_size(1280.0, 800.0)
                 .min_inner_size(320.0, 240.0)
                 .center()
+                // Frameless window: VS Code's default Windows experience is the
+                // CUSTOM titlebar (window.titleBarStyle = "custom"), where the
+                // workbench renders its own titlebar + drag region and reserves
+                // `.window-controls-container` space for overlay controls. The
+                // shim injects the minimize/maximize/close buttons there and
+                // mirrors Electron's -webkit-app-region drag semantics onto
+                // `.titlebar-drag-region` via startDragging().
+                .decorations(false)
                 .initialization_script(shim::SHIM_JS)
                 .build()?;
 
-            logger::log_app("info", "main window created; workbench loading via vscode-file://");
+            // Devtools on demand (F12 / Ctrl+Shift+I through the workbench's
+            // dev keybindings -> `vscode:toggleDevTools` -> ipc.rs). Invaluable
+            // for bring-up on machines without a debugger attached.
+            if std::env::var("VSTAURI_DEVTOOLS").map(|v| v == "1").unwrap_or(false) {
+                window.open_devtools();
+            }
+
+            ipc::init_dispatch(app.handle().clone());
+
+            logger::log_app("info", "main window created; workbench loading via vscode-file://localhost");
             Ok(())
         });
 
@@ -147,14 +174,17 @@ fn vscode_window_config() -> Result<serde_json::Value, String> {
     }
 }
 
-/// ipcRenderer.send / ipcRenderer.invoke routing with contract logging.
+/// ipcRenderer.send / ipcRenderer.invoke routing with contract logging. The
+/// `vscode:message` channel carries a base64-encoded binary protocol frame
+/// in `args[0]` (see ipc.rs — the main-process message protocol).
 #[tauri::command]
 fn vscode_ipc(
+    app: tauri::AppHandle,
     channel: String,
     args: Vec<serde_json::Value>,
     kind: String,
 ) -> Result<serde_json::Value, String> {
-    ipc::route(&channel, &args, &kind)
+    ipc::route(&app, &channel, &args, &kind)
 }
 
 /// webFrame.setZoomLevel -> WebView2 zoom (scale = 1.2^level, identical to

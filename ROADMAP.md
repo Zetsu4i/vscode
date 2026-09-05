@@ -95,6 +95,12 @@ Open the existing VS Code workbench UI inside a Tauri window without replacing f
   - [x] `window.vscode.ipcRenderer` (send/invoke/on/once/removeListener with original `vscode:` channel names, routed to Rust and logged to `ipc-calls.jsonl`)
   - [x] `Buffer` / `global` intentionally NOT shimmed (Electron sandboxed renderers do not expose them either)
 - [ ] Get the workbench window to render without fatal errors (needs first run on Windows; error feedback lands in `%APPDATA%\VSTauri\logs\vstauri.log` + `ipc-calls.jsonl`)
+  - [x] Root cause of the first build's blank white window found and fixed: the document was served from `http://vscode-file.vscode-app`, which Tauri v2 classifies as a REMOTE origin (`is_local_url` only accepts `http://<scheme>.localhost` hosts), so every `invoke()` from the preload shim was rejected by the IPC ACL. The window now navigates to `vscode-file://localhost/...` → origin `http://vscode-file.localhost` → local → IPC allowed.
+  - [x] ESM boot bridged: the workbench's absolute import (`vscode-file://vscode-app/<appRoot>/out/vs/workbench/workbench.desktop.main.js`) can never resolve under WebView2 (wry only routes http(s) WebResourceRequested traffic), so the shim enables the renderer's own dev boot path (`VSCODE_DEV` + `_VSCODE_USE_RELATIVE_IMPORTS` → document-relative workbench import) and traps `_VSCODE_FILE_ROOT` so all `FileAccess` URLs resolve inside the document origin.
+  - [x] CSS module bridge: the dev-compiled ESM tree keeps `import './x.css'` statements; protocol.rs answers those module-graph requests with `_VSCODE_CSS_LOAD` wrapper modules (the server-side twin of Electron dev's cssModules import map) and serves `text/css` for stylesheet requests (distinguished by `Sec-Fetch-Dest`).
+  - [x] Main-process IPC protocol implemented natively: `vscode:hello` → Initialize frame, `vscode:message` binary frames (base64 bridge, codec mirrored from ipc.ts and round-trip tested), channel router with `nativeHost` window operations; unregistered channels reject like Electron's pending-request timeout and are logged for Phase 2.
+  - [x] Custom-titlebar parity: frameless window (`decorations: false`), drag region + dblclick-maximize on `.titlebar-drag-region`, injected `.window-icon` min/max/close buttons into `.window-controls-container`, WebView2 default context menu suppressed globally.
+  - [x] Full request trace logging in the protocol handler (first 1000 requests per run) + renderer error forwarding — the remote-debugging loop for the next iterations.
 - [x] Keep Electron app still buildable in parallel (Electron tree untouched)
 
 ### Acceptance
@@ -103,6 +109,7 @@ Open the existing VS Code workbench UI inside a Tauri window without replacing f
 - [ ] Editor area renders Monaco
 - [ ] No crash on initial startup
 - [x] Original Electron build still works (compile job green on Windows CI)
+- [x] CI build time: node_modules cache (upstream composite actions) + compiled `out/` cache keyed on `hashFiles(src/**, build/**, package*.json)` — typecheck and the gulp compile are skipped entirely when renderer inputs are unchanged (the normal case during the shell transplant, which lives in `src-tauri/` and `.github/`)
 
 ---
 

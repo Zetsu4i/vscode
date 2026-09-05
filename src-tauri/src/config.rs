@@ -81,15 +81,13 @@ fn build(app: &tauri::AppHandle) -> Value {
             json!([])
         });
 
-    // Dev-parity CSS loading: every out-relative css file, mirroring
-    // cssDevelopmentService.getCssModules() (sorted 'vs/...' paths) which
-    // setupCSSImportMaps() in the workbench bootstrap consumes.
-    let css_modules = read_json_file(&client_root.join("css-modules.json"))
-        .filter(|value| value.is_array())
-        .unwrap_or_else(|| {
-            crate::logger::log_app("warn", "css-modules.json missing/invalid; workbench will boot without dev css import map");
-            json!([])
-        });
+    // Dev-parity ESM boot: the workbench's absolute workbench import
+    // (`vscode-file://vscode-app/<appRoot>/out/...`) cannot be resolved by
+    // WebView2 (wry only routes http(s) WebResourceRequested traffic), so the
+    // shim enables the renderer's own documented development path:
+    // VSCODE_DEV + _VSCODE_USE_RELATIVE_IMPORTS makes workbench.ts import
+    // `../../../workbench/workbench.desktop.main.js` relative to the document,
+    // which resolves inside this origin. See shim.js.
 
     let exec_path = std::env::current_exe()
         .map(|p| p.to_string_lossy().into_owned())
@@ -124,12 +122,7 @@ fn build(app: &tauri::AppHandle) -> Value {
         "unknown"
     };
 
-    let profile = json!({
-        "id": "default",
-        "name": "Default",
-        "isDefault": true,
-        "uri": uri_components(&user_dir)
-    });
+    let profile = default_profile(&user_dir, &data_root);
 
     json!({
         // ISandboxConfiguration
@@ -141,7 +134,14 @@ fn build(app: &tauri::AppHandle) -> Value {
             "messages": nls_messages,
             "language": "en"
         },
-        "cssModules": css_modules,
+        // CSS modules stay EMPTY in this shell: the Electron dev-mode css
+        // import map is keyed by `vscode-file://` URLs that can never match
+        // this document's origin, so the workbench's setupCSSImportMaps would
+        // build a dead map. Instead protocol.rs answers every `import './x.css'`
+        // module-graph member with a `_VSCODE_CSS_LOAD` wrapper (see
+        // protocol.rs css_module_response) — the server-side equivalent of the
+        // blob modules that cssModules produces in Electron dev.
+        "cssModules": [],
 
         // INativeWindowConfiguration
         "mainPid": std::process::id(),
@@ -201,6 +201,42 @@ fn build(app: &tauri::AppHandle) -> Value {
     })
 }
 
+/// The default profile, field-for-field like electron-main's
+/// `createDefaultProfile()` (src/vs/platform/userDataProfile/common/userDataProfile.ts):
+/// id `__default__profile__`, location = userRoamingDataHome, every resource
+/// joined off the location, cacheHome under CachedProfilesData.
+fn default_profile(user_dir: &Path, data_root: &Path) -> Value {
+    let location = user_dir;
+    let cache_home = data_root
+        .join("Cache")
+        .join("CachedProfilesData")
+        .join("__default__profile__");
+    json!({
+        "id": "__default__profile__",
+        "name": "Default",
+        "isDefault": true,
+        "location": uri_components(location),
+        "globalStorageHome": uri_components(&location.join("globalStorage")),
+        "settingsResource": uri_components(&location.join("settings.json")),
+        "keybindingsResource": uri_components(&location.join("keybindings.json")),
+        "tasksResource": uri_components(&location.join("tasks.json")),
+        "snippetsHome": uri_components(&location.join("snippets")),
+        "promptsHome": uri_components(&location.join("prompts")),
+        "extensionsResource": uri_components(&location.join("extensions.json")),
+        "mcpResource": uri_components(&location.join("mcp.json")),
+        "languageModelsResource": uri_components(&location.join("chatLanguageModels.json")),
+        "agentPluginsHome": uri_components(&location.join("agent-plugins")),
+        "cacheHome": uri_components(&cache_home),
+        "isTransient": false,
+        "isAgentsWindowProfile": false
+    })
+}
+
+/// Cache home URI for nativeHost.getCacheHome.
+pub fn cache_home_uri() -> Value {
+    uri_components(&data_root().join("Cache"))
+}
+
 fn read_json_file(path: &Path) -> Option<Value> {
     match std::fs::read_to_string(path) {
         Ok(content) => match serde_json::from_str(&content) {
@@ -217,9 +253,6 @@ fn read_json_file(path: &Path) -> Option<Value> {
     }
 }
 
-/// Directory where the shell keeps its state (machine id, logs, user data).
-/// Windows: %APPDATA%/VSTauri — deliberately NOT the real VS Code "Code"
-/// folder so the Tauri build can coexist with an installed Electron build.
 fn data_root() -> PathBuf {
     if let Ok(appdata) = std::env::var("APPDATA") {
         if !appdata.is_empty() {

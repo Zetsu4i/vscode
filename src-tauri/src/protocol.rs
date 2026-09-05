@@ -18,11 +18,13 @@
 //! document URL (`vscode-file://vscode-app/out/...`).
 
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::OnceLock;
 use tauri::http::{Request, Response, StatusCode};
 use tauri::Manager;
 
 static CLIENT_ROOT: OnceLock<PathBuf> = OnceLock::new();
+static REQUEST_TRACE_COUNT: AtomicU64 = AtomicU64::new(0);
 
 /// Resolve (and cache) the directory holding the bundled workbench client.
 pub fn client_root(app: &tauri::AppHandle) -> &'static PathBuf {
@@ -69,11 +71,26 @@ fn resolve_client_root(app: &tauri::AppHandle) -> PathBuf {
 pub fn serve(app: &tauri::AppHandle, request: Request<Vec<u8>>) -> Response<Vec<u8>> {
     let raw_path = request.uri().path().to_string();
     let decoded = crate::util::percent_decode(&raw_path).replace('\\', "/");
+    let method = request.method().as_str().to_string();
     let root = client_root(app).clone();
 
     if root.as_os_str().is_empty() {
         crate::logger::log_app("error", "vscode-file: client bundle directory not found");
         return text_response(StatusCode::NOT_FOUND, "client bundle not found");
+    }
+
+    // CSS is requested in two different roles (mirrors Electron dev, where
+    // the cssModules import map turns every `import './x.css'` into a blob
+    // module that injects a <link>):
+    //   * as a JS module graph member (Sec-Fetch-Dest: script) — serve a tiny
+    //     module that calls `globalThis._VSCODE_CSS_LOAD(url)` (defined by the
+    //     preload shim) which appends the real <link rel=stylesheet>;
+    //   * as a stylesheet (<link>, Sec-Fetch-Dest: style) — serve text/css.
+    // Without this bridge the ESM tree (which keeps its `import './x.css'`
+    // statements in the dev compile) would fail to load with a MIME error.
+    if decoded.ends_with(".css") && fetch_dest_is_script(&request) {
+        trace_request(&method, &raw_path, 200);
+        return css_module_response(&raw_path);
     }
 
     let rel = decoded.trim_start_matches('/').to_string();
@@ -120,8 +137,12 @@ pub fn serve(app: &tauri::AppHandle, request: Request<Vec<u8>>) -> Response<Vec<
     }
 
     match std::fs::read(&target) {
-        Ok(bytes) => file_response(&target, bytes),
+        Ok(bytes) => {
+            trace_request(&method, &raw_path, 200);
+            file_response(&target, bytes)
+        }
         Err(err) => {
+            trace_request(&method, &raw_path, 500);
             crate::logger::log_app("error", &format!("vscode-file read error {}: {}", mapped, err));
             text_response(StatusCode::INTERNAL_SERVER_ERROR, "read error")
         }
@@ -176,6 +197,53 @@ fn is_served(rel: &str) -> bool {
         }
     }
     false
+}
+
+/// Does this request come from the module loader (a `import './x.css'`
+/// statement) rather than a stylesheet/<link> fetch?
+fn fetch_dest_is_script(request: &Request<Vec<u8>>) -> bool {
+    match request.headers().get("sec-fetch-dest").and_then(|v| v.to_str().ok()) {
+        Some(dest) => dest == "script",
+        None => {
+            // Fallback for headers we might not see: module script fetches ask
+            // for */* without a text/css preference; stylesheet fetches lead
+            // with text/css.
+            match request.headers().get("accept").and_then(|v| v.to_str().ok()) {
+                Some(accept) if accept.starts_with("text/css") => false,
+                Some(_) => true,
+                None => false,
+            }
+        }
+    }
+}
+
+/// The CSS-as-module wrapper served for `import './x.css'` members of the ESM
+/// graph — the server-side twin of the blob modules that
+/// `setupCSSImportMaps()` generates in Electron dev mode.
+fn css_module_response(raw_path: &str) -> Response<Vec<u8>> {
+    let script = format!(
+        "/* vstauri css module bridge */\nglobalThis._VSCODE_CSS_LOAD && globalThis._VSCODE_CSS_LOAD('{}');\nexport default undefined;\n",
+        raw_path.replace('\'', "%27")
+    );
+    let mut response = Response::new(script.into_bytes());
+    *response.status_mut() = StatusCode::OK;
+    let headers = response.headers_mut();
+    headers.insert(
+        tauri::http::header::CONTENT_TYPE,
+        tauri::http::HeaderValue::from_static("text/javascript; charset=utf-8"),
+    );
+    finish_common_headers(headers);
+    response
+}
+
+/// Compact request trace — the remote-debugging eyes for this shell. The
+/// first 1000 requests log individually (enough to cover a full workbench
+/// boot), then every 100th keeps the file bounded on hot paths.
+fn trace_request(method: &str, path: &str, status: u16) {
+    let n = REQUEST_TRACE_COUNT.fetch_add(1, Ordering::Relaxed);
+    if n < 1000 || (n + 1).is_multiple_of(100) {
+        crate::logger::log_app("trace", &format!("http {} {} -> {}", method, path, status));
+    }
 }
 
 fn mime_for(path: &Path) -> &'static str {

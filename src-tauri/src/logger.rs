@@ -25,7 +25,7 @@ pub fn init(logs_dir: &Path) {
             if let Ok(mut guard) = LOG_PATH.lock() {
                 *guard = Some(path);
             }
-            log_app("info", &format!("logger initialized"));
+            log_app("info", "logger initialized");
         }
         Err(err) => {
             eprintln!("[vstauri] cannot open log file {:?}: {}", path, err);

@@ -10,7 +10,10 @@ edition = "2021"
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = [] }
+# "devtools": allows opening WebView2 devtools in release builds — the
+# workbench's F12 / Ctrl+Shift+I dev keybindings route through
+# `vscode:toggleDevTools` (ipc.rs). Keep during bring-up; drop in Phase 11.
+tauri = { version = "2", features = ["devtools"] }
 serde_json = "1"
 
 [profile.release]
