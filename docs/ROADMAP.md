@@ -82,13 +82,17 @@ theme switcher. VSTauri does both natively:
 
 ## Phase 2 — Personalization
 
-- [ ] `settings.json` + Settings UI (scopes: user / workspace)
+- [x] `settings.json` + Settings UI (scopes: user / workspace) — JSONC
+      backend, dotted-key files like VSCode, live appliers (editor, theme,
+      terminal), Settings editor tab with search/scopes/reset (Ctrl+,),
+      Open User/Workspace Settings (JSON) commands
 - [x] Theme engine core: workbench CSS variables + Monaco themes + xterm
       palettes (Phase 1.5) — `contributes.themes` support remains
 - [ ] Icon themes
 - [ ] Keybinding editor + user keybindings.json
 - [ ] Profiles: recent workspaces store, layout persistence, session restore
-- [ ] Auto-save, format-on-save (LSP `textDocument/formatting`)
+- [x] Auto-save (`files.autoSave: afterDelay` + delay)
+- [ ] Format-on-save (LSP `textDocument/formatting`)
 
 ## Phase 3 — Extensions
 
