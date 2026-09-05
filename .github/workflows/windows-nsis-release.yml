@@ -167,6 +167,13 @@ jobs:
           # product.json + nls.messages.json are read by the Rust shell and
           # served into the window configuration (same shape the Electron
           # main process injects).
+          #
+          # NLS: the DEV compile (compileTask('src','out',false)) does NOT emit
+          # out/nls.messages.{js,json} — it keeps English strings inline in
+          # the modules (src/vs/nls.ts localize falls back to the literal
+          # message, and lookupMessage falls back to the inline default).
+          # So: use the file when a build produced one, otherwise ship an
+          # empty array and rely on the inline English defaults.
           node <<'NODE'
           const fs = require('fs');
           const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
@@ -175,15 +182,34 @@ jobs:
           prod.commit = process.env.GITHUB_SHA;
           prod.date = new Date().toISOString().slice(0, 10);
           fs.writeFileSync('staging/product.json', JSON.stringify(prod, null, 2));
-          const nlsSource = fs.readFileSync('out/nls.messages.js', 'utf8');
-          const match = nlsSource.match(/\[[\s\S]*\]/);
-          if (!match) { throw new Error('cannot extract NLS messages array from out/nls.messages.js'); }
-          const messages = JSON.parse(match[0]);
-          if (!Array.isArray(messages) || messages.length === 0) { throw new Error('NLS messages array is empty or not an array'); }
+
+          let messages = null;
+          if (fs.existsSync('out/nls.messages.json')) {
+            const parsed = JSON.parse(fs.readFileSync('out/nls.messages.json', 'utf8'));
+            if (Array.isArray(parsed)) { messages = parsed; }
+          }
+          if (!messages && fs.existsSync('out/nls.messages.js')) {
+            const nlsSource = fs.readFileSync('out/nls.messages.js', 'utf8');
+            const match = nlsSource.match(/\[[\s\S]*\]/);
+            if (match) {
+              const parsed = JSON.parse(match[0]);
+              if (Array.isArray(parsed)) { messages = parsed; }
+            }
+          }
+          if (!messages) {
+            console.log('::warning::no out/nls.messages.{json,js} produced by this compile; using empty NLS array (dev compile keeps English strings inline — see src/vs/nls.ts lookupMessage fallback)');
+            messages = [];
+          }
           fs.writeFileSync('staging/nls.messages.json', JSON.stringify(messages));
           console.log('product.json:', prod.nameShort, prod.version, prod.commit);
           console.log('nls.messages.json:', messages.length, 'messages');
           NODE
+
+      # Diagnostic: what landed in out/ (root level) — helps catch layout
+      # drift between build configurations early.
+      - name: List out/ root (diagnostics)
+        shell: bash
+        run: ls out/ | head -40
 
       # Fail here, not on the user's desk: every file below is required for
       # the workbench to boot through the vscode-file protocol.
@@ -196,7 +222,6 @@ jobs:
             staging/out/vs/code/electron-browser/workbench/workbench.js \
             staging/out/vs/workbench/workbench.desktop.main.js \
             staging/out/vs/workbench/workbench.desktop.main.css \
-            staging/out/nls.messages.js \
             staging/out/vs/base/browser/ui/codicons/codicon/codicon.ttf \
             staging/node_modules/vscode-oniguruma/release/onig.wasm \
             staging/product.json \

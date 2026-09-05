@@ -36,7 +36,6 @@ const SMOKE_FILES: &[&str] = &[
     "out/vs/code/electron-browser/workbench/workbench.js",
     "out/vs/workbench/workbench.desktop.main.js",
     "out/vs/workbench/workbench.desktop.main.css",
-    "out/nls.messages.js",
     "out/vs/base/browser/ui/codicons/codicon/codicon.ttf",
     "node_modules/vscode-oniguruma/release/onig.wasm",
     "product.json",
