@@ -1,23 +1,33 @@
 name: Windows NSIS Release
 
-# Per AGENTS.md hard constraint 8: Windows NSIS builds only.
+# Per AGENTS.md hard constraint 1: all product work happens on the
+# `tauri-rebuild` branch ONLY — `main` is the pristine microsoft/vscode
+# mirror the user branches from for their own experiments.
 # Every successful build is published as a GitHub Release automatically.
 
 on:
   push:
-    branches: [main]
+    branches: [tauri-rebuild]
+    paths-ignore:
+      - '**.md'
   workflow_dispatch:
 
 concurrency:
   group: release-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 env:
   UPSTREAM_REPO: microsoft/vscode
 
 jobs:
   # ---------------------------------------------------------------------------
-  # 1. Build the REAL Visual Studio Code web client from the pinned upstream
+  # 1. Build the REAL Visual Studio Code web client from the pinned upstream.
+  #    Fully cached: while the upstream pin, patches, bridge and build scripts
+  #    are unchanged, the whole npm ci + tsc + gulp pipeline (~25 min) is
+  #    skipped and the previous client build is restored from cache.
   # ---------------------------------------------------------------------------
   build-client:
     runs-on: ubuntu-latest
@@ -33,7 +43,20 @@ jobs:
           echo "tag=$(cat UPSTREAM_TAG)" >> "$GITHUB_OUTPUT"
           echo "sha=$(cat UPSTREAM_SHA)" >> "$GITHUB_OUTPUT"
 
+      - name: Compute client cache key
+        id: key
+        run: |
+          echo "key=vscode-web-client-$(cat UPSTREAM_SHA)-${{ hashFiles('patches/**', 'bridge/**', 'scripts/prepare-client.sh') }}" >> "$GITHUB_OUTPUT"
+
+      - name: Restore cached client build
+        id: client-cache
+        uses: actions/cache@v4
+        with:
+          path: vscode-web
+          key: ${{ steps.key.outputs.key }}
+
       - name: Checkout pinned upstream vscode
+        if: steps.client-cache.outputs.cache-hit != 'true'
         uses: actions/checkout@v4
         with:
           repository: ${{ env.UPSTREAM_REPO }}
@@ -42,12 +65,14 @@ jobs:
           fetch-depth: 1
 
       - name: Verify pinned SHA
+        if: steps.client-cache.outputs.cache-hit != 'true'
         run: |
           actual="$(git -C upstream rev-parse HEAD)"
           echo "upstream at $actual, pinned $(cat UPSTREAM_SHA)"
           [ "$actual" = "$(cat UPSTREAM_SHA)" ] || { echo "::error::SHA mismatch"; exit 1; }
 
       - name: Setup node (upstream .nvmrc)
+        if: steps.client-cache.outputs.cache-hit != 'true'
         uses: actions/setup-node@v4
         with:
           node-version-file: upstream/.nvmrc
@@ -55,17 +80,20 @@ jobs:
           cache-dependency-path: upstream/package-lock.json
 
       - name: Install build prerequisites
+        if: steps.client-cache.outputs.cache-hit != 'true'
         run: |
           sudo apt-get update
           sudo apt-get install -y python3 make build-essential \
             libx11-dev libxkbfile-dev libsecret-1-dev libkrb5-dev
 
       - name: Prepare client tree (copy bridge, apply patches)
+        if: steps.client-cache.outputs.cache-hit != 'true'
         run: |
           chmod +x scripts/*.sh
           ./scripts/prepare-client.sh
 
       - name: npm ci
+        if: steps.client-cache.outputs.cache-hit != 'true'
         working-directory: upstream
         env:
           ELECTRON_SKIP_BINARY_DOWNLOAD: 1
@@ -73,24 +101,33 @@ jobs:
         run: npm ci --no-audit --no-fund
 
       - name: Typecheck (tsc --noEmit, full src incl. bridge)
+        if: steps.client-cache.outputs.cache-hit != 'true'
         working-directory: upstream
         run: node node_modules/.bin/tsc --noEmit -p src/tsconfig.json
 
       - name: Build vscode-web client (gulp vscode-web-ci)
+        if: steps.client-cache.outputs.cache-hit != 'true'
         working-directory: upstream
         run: npm run gulp vscode-web-ci
 
       # The backbone serves product.json to the workbench as
       # `productConfiguration` (same as webClientServer.ts does upstream).
       # The gulp packaging task does not include it — inject it here with the
-      # same version/commit/date the client build itself received.
+      # same version/commit/date the client build itself received. Runs on
+      # every build so the date stays current even on cache hits.
       - name: Ship product.json with the client
         run: |
           python3 - <<'PY'
-          import json, datetime
-          prod = json.load(open('upstream/product.json', encoding='utf-8'))
-          pkg = json.load(open('upstream/package.json', encoding='utf-8'))
-          prod.setdefault('version', pkg['version'])
+          import json, datetime, os
+          prod = json.load(open('upstream/product.json', encoding='utf-8')) \
+              if os.path.exists('upstream/product.json') else None
+          if prod is None:
+              # cache hit: reuse the product.json shipped with the client
+              prod = json.load(open('vscode-web/product.json', encoding='utf-8'))
+          pkg = json.load(open('upstream/package.json', encoding='utf-8')) \
+              if os.path.exists('upstream/package.json') else {}
+          if 'version' in pkg:
+              prod.setdefault('version', pkg['version'])
           prod['commit'] = open('UPSTREAM_SHA', encoding='utf-8').read().strip()
           prod['date'] = datetime.date.today().isoformat()
           with open('vscode-web/product.json', 'w', encoding='utf-8') as f:
@@ -122,6 +159,7 @@ jobs:
 
   # ---------------------------------------------------------------------------
   # 2. Bundle the Windows NSIS installer (only target per AGENTS.md)
+  #    Rust deps, the tauri-cli binary and the NSIS tooling are all cached.
   # ---------------------------------------------------------------------------
   bundle-windows:
     needs: build-client
@@ -154,11 +192,96 @@ jobs:
           workspaces: src-tauri
           key: windows
 
+      - name: Cache tauri-cli binary
+        id: tacli
+        uses: actions/cache@v4
+        with:
+          path: ~\.cargo\bin\cargo-tauri.exe
+          key: tauri-cli-v2-windows-stable
+
       - name: Install tauri-cli
+        if: steps.tacli.outputs.cache-hit != 'true'
         run: cargo install tauri-cli --version '^2' --locked
+
+      - name: Cache NSIS tooling
+        uses: actions/cache@v4
+        with:
+          path: ~\AppData\Local\tauri
+          key: tauri-nsis-windows-v1
 
       - name: Build Windows bundle (NSIS only)
         run: cargo tauri build --config src-tauri/tauri.windows.conf.json
+
+      # End-to-end guard: run the freshly built binary headless and assert the
+      # backbone serves the workbench correctly. This is the class of bug that
+      # shipped twice (missing workbench.js, then text/plain content type) —
+      # it now fails CI instead of the user's desktop.
+      - name: Smoke test the built app
+        shell: bash
+        run: |
+          set -euo pipefail
+          EXE=""
+          for cand in src-tauri/target/release/vstauri.exe src-tauri/target/release/VSTauri.exe; do
+            [ -f "$cand" ] && { EXE="$cand"; break; }
+          done
+          [ -n "$EXE" ] || EXE="$(ls src-tauri/target/release/*.exe | head -1)"
+          echo "smoke target: $EXE"
+          export VSTAURI_CLIENT_DIR="$PWD/src-tauri/resources/client"
+          "$EXE" --vstauri-smoke > smoke.out 2> smoke.err < /dev/null &
+          ready=0
+          for i in $(seq 1 30); do
+            grep -q VSTAURI_SMOKE_READY smoke.out 2>/dev/null && { ready=1; break; }
+            sleep 1
+          done
+          kill_smoke() { taskkill //F //IM "$(basename "$EXE")" >/dev/null 2>&1 || true; }
+          if [ "$ready" != 1 ]; then
+            echo "::error::smoke backbone did not start"
+            cat smoke.err smoke.out || true
+            kill_smoke
+            exit 1
+          fi
+          PORT=$(sed -n 's/.*port=\([0-9]*\).*/\1/p' smoke.out | head -1)
+          base="http://127.0.0.1:$PORT"
+          echo "smoke backbone on $base"
+
+          # 1) the workbench page MUST be text/html — never text/plain
+          #    (axum String responses default to text/plain, which made
+          #    WebView2 render the HTML source as literal text)
+          hdr=$(curl -sS -o wb.html -D - "$base/")
+          echo "$hdr" | head -1 | grep -q " 200 " \
+            || { echo "::error::GET / status: $(echo "$hdr" | head -1)"; kill_smoke; exit 1; }
+          ct=$(echo "$hdr" | tr -d '\r' | sed -n 's/^[Cc]ontent-[Tt]ype: *//p')
+          case "$ct" in
+            text/html*) echo "ok  / -> $ct" ;;
+            *) echo "::error::/ content-type '$ct' (want text/html)"; kill_smoke; exit 1 ;;
+          esac
+          grep -q 'globalThis.__VSTAURI__={' wb.html \
+            || { echo "::error::__VSTAURI__ injection missing"; kill_smoke; exit 1; }
+          if grep -q '__VSTAURI__={{' wb.html; then
+            echo "::error::__VSTAURI__ injected invalid {{...}} JS"; kill_smoke; exit 1
+          fi
+          grep -q '<!DOCTYPE html>' wb.html \
+            || { echo "::error::workbench payload wrong"; kill_smoke; exit 1; }
+
+          # 2) boot files must resolve with correct MIME types
+          check() {
+            h=$(curl -sS -o /dev/null -D - "$base$1")
+            echo "$h" | head -1 | grep -q " 200 " \
+              || { echo "::error::GET $1 status: $(echo "$h" | head -1)"; kill_smoke; exit 1; }
+            t=$(echo "$h" | tr -d '\r' | sed -n 's/^[Cc]ontent-[Tt]ype: *//p')
+            case "$t" in
+              $2*) echo "ok  $1 -> $t" ;;
+              *) echo "::error::$1 content-type '$t' (want $2)"; kill_smoke; exit 1 ;;
+            esac
+          }
+          check "/out/vs/code/browser/workbench/workbench.js" "text/javascript"
+          check "/out/vs/code/browser/workbench/workbench.css" "text/css"
+          check "/out/nls.messages.js" "text/javascript"
+          check "/product.json" "application/json"
+          check "/resources/server/favicon.ico" "image/x-icon"
+
+          kill_smoke
+          echo "SMOKE OK — workbench serves as text/html with valid __VSTAURI__"
 
       - name: Upload Windows installer (NSIS)
         uses: actions/upload-artifact@v4
