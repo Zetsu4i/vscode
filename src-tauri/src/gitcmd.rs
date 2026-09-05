@@ -1,5 +1,4 @@
 use serde::Serialize;
-use std::path::Path;
 use std::process::Command;
 
 fn run_git(root: &str, args: &[&str]) -> Result<String, String> {

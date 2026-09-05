@@ -283,9 +283,9 @@ pub async fn lsp_stop(state: State<'_, LspState>, language: String) -> Result<()
     if let Some(server) = state.servers.lock().await.remove(&language) {
         let _ = send_request(&server, "shutdown", Value::Null, 2_000).await;
         let _ = send_notification(&server, "exit", Value::Null).await;
-        if let Ok(mut child) = server.child.lock().await {
-            let _ = child.kill().await;
-        }
+        // tokio Mutex::lock() yields the guard directly (no poisoning result).
+        let mut child = server.child.lock().await;
+        let _ = child.kill();
     }
     Ok(())
 }

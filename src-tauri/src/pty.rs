@@ -1,7 +1,5 @@
 use base64::Engine;
-use portable_pty::{
-    native_pty_system, Child, ChildKiller, CommandBuilder, MasterPty, PtySize, SlavePty,
-};
+use portable_pty::{native_pty_system, ChildKiller, CommandBuilder, MasterPty, PtySize};
 use serde::Serialize;
 use std::collections::HashMap;
 use std::io::{Read, Write};
@@ -289,9 +287,10 @@ pub fn create_pty(
                             None
                         } else {
                             // Pre-attach: buffer early output (prompt, MOTD).
-                            if g.pending.len() + n > PENDING_CAP {
-                                let overflow = g.pending.len() + n - PENDING_CAP;
-                                g.pending.drain(..overflow.min(g.pending.len()));
+                            let len = g.pending.len();
+                            if len + n > PENDING_CAP {
+                                let overflow = len + n - PENDING_CAP;
+                                g.pending.drain(..overflow.min(len));
                             }
                             g.pending.extend_from_slice(&buf[..n]);
                             Some(())

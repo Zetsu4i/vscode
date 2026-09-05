@@ -22,12 +22,12 @@ pub struct WindowState {
     pub maximized: bool,
 }
 
-fn state_path(app: &AppHandle) -> Option<std::path::PathBuf> {
+fn state_path<R: Runtime>(app: &AppHandle<R>) -> Option<std::path::PathBuf> {
     Some(app.path().app_config_dir().ok()?.join("window-state.json"))
 }
 
 /// Restore the saved geometry at startup (window still hidden).
-pub fn restore(app: &AppHandle) {
+pub fn restore<R: Runtime>(app: &AppHandle<R>) {
     let Some(window) = app.get_webview_window("main") else {
         return;
     };
@@ -81,7 +81,7 @@ pub fn save_now<R: Runtime>(window: &Window<R>) -> Result<(), String> {
     write_state(window.app_handle(), &st)
 }
 
-fn write_state(app: &AppHandle, st: &WindowState) -> Result<(), String> {
+fn write_state<R: Runtime>(app: &AppHandle<R>, st: &WindowState) -> Result<(), String> {
     let Some(path) = state_path(app) else {
         return Err("no config dir".into());
     };

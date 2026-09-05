@@ -117,26 +117,25 @@ fn resolve(state: &AssetState, uri: &str) -> Result<(Vec<u8>, &'static str), Str
     Ok((buf, mime_for(&canon)))
 }
 
-/// Register the protocol on the builder. `bytes.into()` deliberately
-/// compiles for both the `Vec<u8>` and the `Cow<'static, [u8]>` response
-/// body variants of the Tauri 2 protocol handler.
+/// Register the protocol on the builder. `register_uri_scheme_protocol` is
+/// the Tauri 2 name (the handler's `T: Into<Cow<'static, [u8]>>` body bound
+/// accepts the plain `Vec<u8>` responses used here).
 pub fn register<R: tauri::Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R> {
-    builder.register_as_uri_scheme_protocol("vstauri", move |ctx, request| {
+    builder.register_uri_scheme_protocol("vstauri", move |ctx, request| {
         let uri = request.uri().to_string();
         let state = ctx.app_handle().state::<AssetState>();
-        let static_builder = Response::builder().header(ACCESS_CONTROL_ALLOW_ORIGIN, "*");
         match resolve(&state, &uri) {
-            Ok((bytes, mime)) => static_builder
-                .clone()
+            Ok((bytes, mime)) => Response::builder()
                 .status(200)
                 .header(CONTENT_TYPE, mime)
-                .body(bytes.into())
+                .header(ACCESS_CONTROL_ALLOW_ORIGIN, "*")
+                .body(bytes)
                 .expect("asset response builder is static"),
-            Err(msg) => static_builder
-                .clone()
+            Err(msg) => Response::builder()
                 .status(404)
                 .header(CONTENT_TYPE, "text/plain; charset=utf-8")
-                .body(msg.into_bytes().into())
+                .header(ACCESS_CONTROL_ALLOW_ORIGIN, "*")
+                .body(msg.into_bytes())
                 .expect("asset response builder is static"),
         }
     })

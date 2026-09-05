@@ -26,18 +26,22 @@ pub fn watch_folder(
     root: String,
 ) -> Result<(), String> {
     let app_handle = app.clone();
-    let mut debouncer = new_debouncer(Duration::from_millis(300), None, move |result| {
-        if let Ok(events) = result {
-            let paths: Vec<String> = events
-                .iter()
-                .flat_map(|e| e.paths.iter())
-                .map(|p| p.to_string_lossy().to_string())
-                .collect();
+    let mut debouncer = new_debouncer(
+        Duration::from_millis(300),
+        None,
+        move |result: notify_debouncer_full::DebounceEventResult| {
+            if let Ok(events) = result {
+                let paths: Vec<String> = events
+                    .iter()
+                    .flat_map(|e| e.paths.iter())
+                    .map(|p| p.to_string_lossy().to_string())
+                    .collect();
             if !paths.is_empty() {
                 let _ = app_handle.emit("fs-changed", serde_json::json!({ "paths": paths }));
             }
-        }
-    })
+            }
+        },
+    )
     .map_err(|e| e.to_string())?;
 
     debouncer
