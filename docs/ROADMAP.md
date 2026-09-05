@@ -57,19 +57,26 @@ theme switcher. VSTauri does both natively:
 - [x] New keybindings: Ctrl+Shift+X, Ctrl+J, Ctrl+G, Ctrl+=, Ctrl+-,
       Ctrl+0, Ctrl+H, Ctrl+/
 
-## Phase 1.6 — Adopted from the SideX study (next)
+## Phase 1.6 — Adopted from the SideX study ✅
 
-- [ ] PTY flow control: byte-count high-watermark + `terminal_ack_data`
-      acks, pre-attach buffering (SideX's best terminal idea)
-- [ ] Window-state persistence: debounced save of sidebar width, panel
-      height, maximized state; restore before show
-- [ ] Shell enumeration + default-shell detection for a terminal
-      profile picker
-- [ ] Window decorations `false` + restore-and-show after first paint
-      (kills the white-flash startup)
-- [ ] Custom `vstauri-asset` protocol with traversal guards for
-      workspace file previews
-- [ ] Avoid SideX's failure modes: no dead parallel service layers, no
+- [x] PTY flow control: byte-count high-watermark (1 MiB pause / 256 KiB
+      resume) + batched frontend acks (`pty_ack`), plus pre-attach buffering
+      (`pty_attach`) so the shell prompt/MOTD is never lost (SideX's best
+      terminal idea, done without its `window.eval` injection)
+- [x] Window-state persistence: authoritative save on close + debounced
+      saves on resize/move; logical-unit geometry; restored in `setup`
+      while the window is hidden
+- [x] Restore-and-show after first paint (`visible: false` in
+      tauri.conf.json + `window_ready`) — kills the white-flash startup
+- [x] Debounced workbench-layout persistence: sidebar width, sidebar/panel
+      visibility, panel height + tab; applied on first render
+- [x] Shell enumeration + default-shell detection (cmd, PowerShell 7+,
+      Git Bash, WSL, PATH-scan extras; /etc/shells on Unix) with a terminal
+      profile picker dropdown next to the "+" button
+- [x] `vstauri://` asset protocol with traversal guards (no `..` components,
+      canonicalize + root containment, 64 MiB cap) + image preview pane
+      served straight from disk
+- [x] Avoid SideX's failure modes: no dead parallel service layers, no
       build-time dependency on a local VSCode install, no `window.eval`
       event injection, no error-swallowing invoke wrappers
 
