@@ -1,11 +1,52 @@
-# AGENTS.md — Rules for AI Agents Working on VSTauri
+# AGENTS.md — Instructions and Restrictions for AI Agents
 
-This repository converts **Microsoft's real Visual Studio Code** into a Tauri 2
-application. The UI must remain **100% identical to upstream VSCode** — agents
-rebuild the *backbone* in Rust, never the interface. Read this file completely
-before changing anything. Violating these rules has already cost us one full
-rewrite: a previous attempt hand-built a lookalike React workbench, hallucinated
-features, and was discarded.
+This repository performs a **shell transplant** of Microsoft's real Visual
+Studio Code: the renderer/workbench UI, Monaco editor, CSS, icons and
+extension host stay **exactly as upstream ships them**; the Electron main
+process is replaced by a **Rust/Tauri v2 shell**; native services are
+re-implemented in Rust **one subsystem at a time**. The final release target
+is **Windows NSIS**.
+
+A previous attempt hand-built a lookalike React workbench, hallucinated
+features, and was discarded. Do not repeat it. Read this file completely
+before changing anything.
+
+## Mission
+
+Preserve, while replacing the Electron shell with Tauri v2:
+
+- 100% UI / look-and-feel parity
+- complete extension support
+- filesystem access
+- terminal access
+- all existing VS Code workbench features
+
+## Hard constraints
+
+1. **`main` branch only.** Development happens on `main`; never inspect,
+   merge, or copy from any other branch (frozen history branches like
+   `tauri-rebuild` are references, not sources).
+2. **Do not redesign the UI.** Keep the original workbench, Monaco editor,
+   CSS, icons, layout, and renderer code. If you are writing workbench
+   UI code (React/HTML/CSS), STOP — you are hallucinating.
+3. **Extension support is critical.** Do not remove the extension host
+   (web-worker host today, Node sidecar tomorrow) until a fully tested
+   replacement exists.
+4. **No feature deletion.** Filesystem, search, terminal, tasks, debug,
+   settings, keybindings, source control, webviews, marketplace and update
+   must remain functional or get wired to the Rust backbone.
+5. **Old code remains until replacement is proven.** Upstream/Electron code
+   stays in place until the Tauri/Rust replacement passes all tests.
+6. **Never delete large chunks at once.** Legacy removal is file-by-file
+   (here: patch-by-patch), in separate cleanup commits, after CI is green.
+7. **Do not hallucinate APIs.** If unsure, read the pinned source in
+   `upstream/` or run a small spike. Never guess interfaces or DI shapes.
+8. **Windows NSIS builds only.** Do not add MSI/WiX/Mac/Linux bundling
+   unless explicitly approved; keep `tauri.windows.conf.json` and the
+   workflow NSIS-only.
+9. **Every subsystem must keep parity behavior.** Do not simplify an API
+   just to make Rust easier — mirror upstream semantics (see
+   `webClientServer.ts`, `terminalEnvironment.ts`, watcher semantics).
 
 ## Source of truth
 
@@ -14,83 +55,109 @@ features, and was discarded.
    repo and never edited except through `patches/*.patch` (applied by
    `scripts/prepare-client.sh`).
 2. **Never invent or redesign UI or features.** If a feature exists upstream,
-   the answer is to wire it to the Rust backbone, not to re-implement it. If
-   you find yourself writing React/HTML/CSS for workbench UI, STOP — you are
-   hallucinating. The workbench is built from upstream source by
-   `scripts/build-client.sh` (`gulp vscode-web`).
+   wire it to the Rust backbone; do not re-implement it.
 3. Reusable upstream code is reused through normal imports. New code lives in
    `bridge/src/vs/workbench/contrib/tauriBridge/**` and compiles *inside* the
    upstream build.
 
-## Translation discipline (old code lives until the new one is 100%)
+## Development process
 
-- The upstream tree is **kept whole**. We do **not** delete upstream code when
-  we take over one of its jobs (e.g. Electron main process code). Deletion is
-  the **last** step of every phase, never the first.
-- A piece of upstream code may only be removed after its replacement is
-  **100% translated and verified working** (built in CI *and* manually
-  exercised). Until then it stays, dormant, exactly as upstream ships it.
-- Deletions happen **step by step through patch files**, each documented, so
-  the repo always builds and the diff to upstream stays reviewable:
-  `patches/NNNN-short-description.patch`.
-- Never modify a patch to "make things easier" — a patch that fights upstream
-  is a sign the bridge is wrong, not upstream.
+### Before replacing any Electron/Node code
+
+1. Identify the original component in the upstream source tree.
+2. Document the IPC surface, input/output behavior, and edge cases (the
+   bridge RPC method list in `src-tauri/src/server/mod.rs` mirrors this).
+3. Add contract tests under `compat/tests/` as the surface grows.
+4. Create or update the relevant phase in `ROADMAP.md`.
+
+### During implementation
+
+- Use small commits: `feat(tauri): ...`, `fix(files): ...`,
+  `test(terminal): ...`, `chore(cleanup): ...`.
+- Keep old code in place while new code is developed.
+- Add new Rust/Tauri services under `src-tauri/src/` (server services in
+  `src-tauri/src/server/`, exposed through `bridge/rpc/<method>`).
+- Keep the VS Code renderer and extension host code as reusable TypeScript —
+  bridge classes implement upstream interfaces only.
+- Update `ROADMAP.md` in the same commit when status changes.
+
+### When removing legacy code
+
+Only delete a legacy file after its replacement:
+
+- passes unit tests
+- passes integration smoke tests
+- passes manual comparison on Windows
+- has been verified against original VS Code behavior
+
+Deletion happens in a separate cleanup commit after CI is green, through a
+documented patch file. Never remove:
+
+- `src/vs/workbench/`
+- Monaco editor code
+- extension host code
+- renderer CSS/UI components
+
+Those are reusable and must remain intact.
 
 ## Patch rules
 
 - Patches are generated from real `git -C upstream diff` output against the
-  pinned SHA and must re-apply cleanly (`git apply --check`). If upstream is
-  ever re-pinned to a newer release, regenerate every patch in the same
-  commit and update `UPSTREAM_SHA`/`UPSTREAM_TAG` with it.
-- Keep the patch surface **minimal and surgical**: registration seams in
-  composition roots (`web.main.ts`), never editor/workbench internals.
+  pinned SHA, must re-apply cleanly (`git apply --check`), and are documented
+  in `patches/README.md`. Keep the surface minimal and surgical: registration
+  seams in composition roots and build entry lists, never editor internals.
 - Every patch hunk is commented with `--- VSTauri bridge (added) ---`.
 
-## Bridge rules
+## Technical rules
 
-- The bridge (`tauriBridge/**`) may only implement **upstream interfaces**
-  (`IFileSystemProvider`, `ITerminalBackend`, `IFileDialogService`, ...).
-  Model implementations on their upstream counterparts (`RemotePty`,
-  `RemoteTerminalBackend`, `HTMLFileSystemProvider`) instead of inventing
-  behavior.
-- Behavior parity beats convenience: if upstream semantics are unknown, read
-  the upstream implementation in `upstream/src/...` and mirror it (e.g. the
-  workbench HTML template rendering mirrors `webClientServer.ts`).
-- The bridge must degrade gracefully: when `globalThis.__VSTAURI__` is absent
-  (plain vscode-web in a normal browser) everything must behave exactly like
-  upstream.
-
-## Backbone (Rust) rules
-
+- Use **Tauri v2** and Rust stable; WebView2 on Windows.
+- The backbone serves the workbench over local HTTP and exposes services via
+  JSON-RPC (`/bridge/rpc/<method>`) + a WebSocket event bus
+  (`/bridge/ws`) — keep channel/method names aligned with the upstream
+  service semantics they replace.
+- Keep the renderer isolated: it only talks to the backbone through the
+  token-authed bridge; no direct process/env access beyond what the served
+  configuration provides.
+- Terminal must use a real PTY: `portable-pty` / ConPTY.
+- Filesystem watchers use Rust `notify` and must preserve VS Code watcher
+  semantics (excludes, atomic writes, event batching).
+- Extension host stays the upstream web-worker host today; the Node sidecar
+  (stdio/JSON-RPC transport over the backbone) is the compatibility path for
+  Node extensions — do not delete it once it exists until a proven
+  replacement lands.
+- Extension webviews run through the upstream webview stack in the webview;
+  native child-webview approaches need a design note first.
+- No `panic!()` or `unwrap()` in production service paths; return
+  `Result` and log.
+- Avoid unsafe dependencies unless explicitly justified.
+- Every replacement service must be instrumented with logs (`eprintln!`/
+  `tracing` at backbone level is fine today).
 - **Everything spawns headless.** The old build popped cmd windows on Windows
-  because child processes were spawned without `CREATE_NO_WINDOW`. Any future
-  use of `std::process::Command` on Windows MUST set
-  `creation_flags(0x08000000)` (CREATE_NO_WINDOW). Prefer libraries over
-  subprocesses entirely (we use `portable-pty`/ConPTY, `notify`, `trash`,
-  `rfd` — none of which open windows). A regression here is release-blocking.
-- No subprocess shells out to tools the libraries can do (`git`, `rg`, `node`
-  lookups caused the popup plague). New backbone services go in
-  `src-tauri/src/server/` and are exposed through `bridge/rpc/<method>`.
-- The backbone never trusts the client: every bridge call/websocket carries
-  the per-session token; paths are validated server-side.
+  because child processes lacked `CREATE_NO_WINDOW`. Any
+  `std::process::Command` on Windows MUST set `creation_flags(0x08000000)`.
+  Prefer libraries over subprocesses (`portable-pty`, `notify`, `trash`,
+  `rfd`, `grep-searcher` — none open windows). A regression here is
+  release-blocking.
 - Validate Rust with `cargo fmt` locally; full type checking happens in CI.
   If you have no cargo, do not "fix" Rust by guessing — read the pinned crate
   sources or let CI compile.
 
-## Process rules
-
-- `ROADMAP.md` is a **living document**: when a phase starts, mark it
-  in-progress; when its acceptance criteria are met, check it off and record
-  what actually shipped. Never merge work that isn't reflected there.
-- One logical change per commit; every commit must keep CI green.
-- CI is the source of truth for builds. Artifacts from a green build are
-  published as a GitHub Release automatically — never hand out local builds.
-- Windows bundles are **NSIS only** (no MSI) — this is a hard product
-  decision; keep it in `tauri.windows.conf.json` and the workflow.
-
 ## Security rules
 
-- The backbone binds `127.0.0.1` only and requires the session token on every
-  bridge request. Never widen this without a design note in the ROADMAP.
-- Never commit tokens, credentials, or the client build output
-  (`vscode-web/`, `src-tauri/resources/client/` are gitignored).
+- The backbone binds `127.0.0.1` only; every bridge call/websocket carries
+  the per-session token; paths are validated server-side.
+- Never paste a PAT into source files; never write tokens to logs.
+- Never commit tokens, credentials, or client build output (`vscode-web/`,
+  `src-tauri/resources/client/` are gitignored).
+- Sign Windows builds when possible (tracked in ROADMAP Phase 11).
+
+## Status tracking
+
+Update `ROADMAP.md` for every phase:
+
+- ⬜ Not started
+- 🟦 In progress
+- ✅ Done
+- ⛔ Blocked
+
+A phase is not Done until all its acceptance tests pass.
