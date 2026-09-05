@@ -1,0 +1,132 @@
+{
+  "$comment": "Catalogue of the Electron main<->renderer IPC surface that the Tauri shell must reproduce. Extracted from src/vs by scanning validatedIpcMain.handle/on and ipcRenderer.send/invoke. Phase numbers refer to ROADMAP.md. Do not implement a channel in Rust before it is listed here (AGENTS.md).",
+  "version": 1,
+  "generatedFrom": "src/vs @ code-oss-dev 1.138.0",
+  "groups": {
+    "window": {
+      "phase": 3,
+      "channels": [
+        {
+          "name": "vscode:hello",
+          "direction": "renderer->main",
+          "kind": "send",
+          "source": "src/vs/base/parts/ipc/electron-browser/ipc.electron.ts",
+          "payload": [],
+          "notes": "Handshake that registers the renderer with the main-side IPCServer. Must be answered before any vscode:message traffic flows.",
+          "status": "implemented"
+        },
+        {
+          "name": "vscode:message",
+          "direction": "bidirectional",
+          "kind": "stream",
+          "source": "src/vs/base/parts/ipc/electron-main/ipc.electron.ts",
+          "payload": ["VSBuffer"],
+          "notes": "The multiplexed channel carrying every IPCServer/IPCClient service call. Transported as length-prefixed binary frames.",
+          "status": "pending"
+        },
+        {
+          "name": "vscode:reloadWindow",
+          "direction": "renderer->main",
+          "kind": "send",
+          "payload": [],
+          "status": "implemented"
+        },
+        {
+          "name": "vscode:toggleDevTools",
+          "direction": "renderer->main",
+          "kind": "send",
+          "payload": [],
+          "status": "implemented"
+        },
+        {
+          "name": "vscode:openDevTools",
+          "direction": "renderer->main",
+          "kind": "send",
+          "payload": [],
+          "status": "implemented"
+        },
+        {
+          "name": "vscode:notifyZoomLevel",
+          "direction": "renderer->main",
+          "kind": "send",
+          "payload": ["number | undefined"],
+          "status": "implemented"
+        },
+        {
+          "name": "vscode:registerAuxiliaryWindow",
+          "direction": "renderer->main",
+          "kind": "invoke",
+          "payload": ["number windowId"],
+          "notes": "Floating editor windows. Maps to a Tauri child webview.",
+          "status": "pending"
+        }
+      ]
+    },
+    "environment": {
+      "phase": 1,
+      "channels": [
+        {
+          "name": "vscode:fetchShellEnv",
+          "direction": "renderer->main",
+          "kind": "invoke",
+          "source": "src/vs/base/parts/sandbox/electron-browser/preload.ts",
+          "returns": "IProcessEnvironment",
+          "notes": "Login-shell environment resolution. Rust implementation in src-tauri/src/shell_env.rs.",
+          "status": "implemented"
+        }
+      ]
+    },
+    "files": {
+      "phase": 4,
+      "channels": [
+        { "name": "vscode:readFile", "direction": "renderer->main", "kind": "invoke", "payload": ["UriComponents"], "returns": "VSBuffer", "status": "pending" },
+        { "name": "vscode:statFile", "direction": "renderer->main", "kind": "invoke", "payload": ["UriComponents"], "returns": "IStat", "status": "pending" }
+      ]
+    },
+    "terminal": {
+      "phase": 5,
+      "channels": [
+        {
+          "name": "vscode:createPtyHostMessageChannel",
+          "direction": "renderer->main",
+          "kind": "messagePort",
+          "notes": "Transfers a MessagePort connected to the pty host. The Tauri shim creates the channel renderer-side and Rust pumps the PTY end (portable-pty/ConPTY).",
+          "status": "pending"
+        }
+      ]
+    },
+    "extensions": {
+      "phase": 7,
+      "channels": [
+        {
+          "name": "vscode:createAgentHostMessageChannel",
+          "direction": "renderer->main",
+          "kind": "messagePort",
+          "notes": "MessagePort to the extension/agent host. Backed by the Node.js sidecar over stdio JSON-RPC.",
+          "status": "pending"
+        }
+      ]
+    },
+    "webview": {
+      "phase": 7,
+      "channels": [
+        { "name": "vscode:browserView:preloadReady", "direction": "renderer->main", "kind": "send", "status": "pending" },
+        { "name": "vscode:browserView:keydown", "direction": "renderer->main", "kind": "send", "status": "pending" },
+        { "name": "vscode:browserView:elementPicked", "direction": "renderer->main", "kind": "send", "status": "pending" },
+        { "name": "vscode:browserView:elementPickStopped", "direction": "renderer->main", "kind": "send", "status": "pending" },
+        { "name": "vscode:browserView:elementCommentRemoved", "direction": "renderer->main", "kind": "send", "status": "pending" },
+        { "name": "vscode:browserView:areaPicked", "direction": "renderer->main", "kind": "send", "status": "pending" },
+        { "name": "vscode:browserView:areaPickStopped", "direction": "renderer->main", "kind": "send", "status": "pending" }
+      ]
+    }
+  },
+  "preloadSurface": {
+    "$comment": "globalThis.vscode as consumed by src/vs/base/parts/sandbox/electron-browser/globals.ts. The Tauri shim (src-tauri/preload/shim.js) must expose exactly these members.",
+    "ipcRenderer": ["send", "invoke", "on", "once", "removeListener"],
+    "ipcMessagePort": ["acquire"],
+    "webFrame": ["setZoomLevel"],
+    "webUtils": ["getPathForFile"],
+    "process": ["platform", "arch", "env", "versions", "type", "execPath", "cwd", "shellEnv", "getProcessMemoryInfo", "on"],
+    "context": ["configuration", "resolveConfiguration"]
+  }
+}

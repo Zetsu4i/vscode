@@ -27,6 +27,65 @@ permissions:
 
 jobs:
   # ---------------------------------------------------------------------------
+  # 0. Fast gate: Rust unit + IPC contract tests. Runs on Linux in ~2 min and
+  #    fails the pipeline before the expensive workbench build starts.
+  # ---------------------------------------------------------------------------
+  shell-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust (stable)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          key: linux-tests
+
+      - name: Install Linux webview deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev \
+            libayatana-appindicator3-dev librsvg2-dev libsoup-3.0-dev
+
+      - name: cargo fmt
+        working-directory: src-tauri
+        run: cargo fmt --check || echo "::warning::formatting drift (non-blocking)"
+
+      - name: cargo test (unit + compat/ipc-contract)
+        working-directory: src-tauri
+        run: cargo test --all-features
+
+      - name: cargo clippy
+        working-directory: src-tauri
+        run: cargo clippy --all-targets -- -D warnings
+
+      # AGENTS.md: "No panic!() or unwrap() in production service paths."
+      - name: Guard against unwrap/panic in service paths
+        shell: bash
+        run: |
+          # Strip `#[cfg(test)]` modules (everything from the attribute to EOF,
+          # which is where our test modules live) before scanning.
+          found=0
+          for f in $(find src-tauri/src -name '*.rs'); do
+            hits=$(awk '/#\[cfg\(test\)\]/{exit} {print NR": "$0}' "$f" \
+                   | grep -E '\.unwrap\(\)|panic!\(' \
+                   | grep -v 'unwrap_or' || true)
+            if [ -n "$hits" ]; then
+              echo "::error file=$f::unwrap()/panic!() in a service path"
+              echo "$hits"
+              found=1
+            fi
+          done
+          [ "$found" = 0 ] || exit 1
+          echo "ok  no unwrap()/panic!() in service paths"
+
+  # ---------------------------------------------------------------------------
   # 1. Build the real VS Code desktop workbench (renderer bundle + built-in
   #    extensions + extension host). Cached on the source tree hash so an
   #    unchanged tree skips the ~30 min npm ci + gulp pipeline.

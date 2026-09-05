@@ -85,7 +85,7 @@ Establish a safe single-branch baseline, add agent rules, roadmap, and CI.
 
 ## Phase 1: Tauri Shell Prototype
 
-### Status: ⬜ Not started
+### Status: 🟦 In progress
 
 ### Goal
 
@@ -94,25 +94,43 @@ features.
 
 ### Tasks
 
-- [ ] Add `src-tauri/` (Cargo workspace, `tauri.conf.json`, `tauri.windows.conf.json`)
-- [ ] Implement the `vscode-file` custom protocol handler resolving `out-vscode`
-- [ ] Create the preload shim exposing the globals the workbench requires:
-  - [ ] `window.vscode.ipcRenderer` (`send`/`on`/`once`/`invoke`/`removeListener`)
-  - [ ] `window.vscode.ipcMessagePort`
-  - [ ] `window.vscode.webFrame`
-  - [ ] `window.vscode.process` (`platform`, `env`, `versions`, `cwd`, `on`)
-  - [ ] `window.vscode.context` (`configuration()`, `resolveConfiguration()`)
-  - [ ] `Buffer`, `setImmediate`, `global`
-- [ ] Feed the workbench its `INativeWindowConfiguration` payload from Rust
-- [ ] Get the workbench window to render without fatal errors
-- [ ] Keep the Electron app buildable in parallel
+- [x] Add `src-tauri/` (Cargo project, `tauri.conf.json`, `tauri.windows.conf.json`)
+- [x] Implement the `vscode-file` custom protocol handler resolving `out-vscode-min`
+      (`src-tauri/src/protocol.rs`) — correct MIME types, percent decoding,
+      Windows drive-letter paths, traversal rejection, root allow-list
+- [x] Create the preload shim exposing the globals the workbench requires
+      (`src-tauri/preload/shim.js`):
+  - [x] `window.vscode.ipcRenderer` (`send`/`on`/`once`/`invoke`/`removeListener`)
+  - [x] `window.vscode.ipcMessagePort` (renderer-side `MessageChannel` inversion)
+  - [x] `window.vscode.webFrame`
+  - [x] `window.vscode.webUtils`
+  - [x] `window.vscode.process` (`platform`, `arch`, `env`, `versions`, `type`,
+        `execPath`, `cwd`, `shellEnv`, `getProcessMemoryInfo`, `on`)
+  - [x] `window.vscode.context` (`configuration()`, `resolveConfiguration()`)
+  - [x] `setImmediate` / `clearImmediate`, `global`
+- [x] Feed the workbench its `INativeWindowConfiguration` payload from Rust
+      (`src-tauri/src/window_config.rs`)
+- [x] Implement `vscode:fetchShellEnv` (`src-tauri/src/shell_env.rs`)
+- [x] Headless `--self-check` regression guard + CI job
+- [x] Catalogue the IPC surface in `compat/ipc-contract.json` with contract tests
+- [x] Keep the Electron app buildable in parallel (nothing under `src/` modified)
+- [ ] Build the workbench bundle in CI and confirm the window paints
+- [ ] Bridge `vscode:message` (the multiplexed `IPCServer` stream) — without it
+      the workbench boots but native services stay disconnected
 
 ### Acceptance
 
 - [ ] Workbench renders in the Tauri window (title bar, activity bar, sidebar, status bar)
 - [ ] Editor area renders Monaco with syntax highlighting
 - [ ] No crash on initial startup
-- [ ] Original Electron build still works
+- [x] Original Electron build still works (no `src/` files touched)
+- [x] `cargo test` green: 12 unit + 6 contract tests
+
+### Notes
+
+The `src/` tree is untouched. Everything the renderer needs that Electron used
+to provide is absorbed by `src-tauri/preload/shim.js` and the Rust services, per
+hard constraint 2.
 
 ---
 

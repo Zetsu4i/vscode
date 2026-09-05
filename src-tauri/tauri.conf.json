@@ -1,0 +1,35 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Code - OSS (Tauri)",
+  "version": "1.138.0",
+  "identifier": "com.zetsu4i.vscode.tauri",
+  "build": {
+    "frontendDist": "../out-vscode-min"
+  },
+  "app": {
+    "withGlobalTauri": false,
+    "windows": [],
+    "security": {
+      "csp": null,
+      "assetProtocol": {
+        "enable": true,
+        "scope": []
+      }
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "icon": [
+      "../resources/win32/code_70x70.png",
+      "../resources/win32/code_150x150.png"
+    ],
+    "resources": {
+      "resources/workbench": "resources/workbench"
+    },
+    "copyright": "Copyright (C) Microsoft Corporation. MIT licensed.",
+    "category": "DeveloperTool",
+    "shortDescription": "Code editing. Redefined.",
+    "longDescription": "The original VS Code workbench hosted by a native Rust/Tauri shell."
+  }
+}

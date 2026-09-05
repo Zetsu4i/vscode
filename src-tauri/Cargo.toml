@@ -1,0 +1,45 @@
+[package]
+name = "vscode-tauri-shell"
+version = "1.138.0"
+description = "Native Tauri shell hosting the original VS Code workbench"
+authors = ["Zetsu4i"]
+edition = "2021"
+rust-version = "1.77"
+default-run = "vscode-tauri-shell"
+
+[lib]
+name = "vscode_shell"
+path = "src/lib.rs"
+
+[[bin]]
+name = "vscode-tauri-shell"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["protocol-asset", "devtools"] }
+tauri-plugin-dialog = "2"
+tauri-plugin-clipboard-manager = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+anyhow = "1"
+thiserror = "2"
+log = "0.4"
+env_logger = "0.11"
+dirs = "5"
+percent-encoding = "2"
+uuid = { version = "1", features = ["v4"] }
+parking_lot = "0.12"
+sysinfo = "0.32"
+
+[features]
+custom-protocol = ["tauri/custom-protocol"]
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
