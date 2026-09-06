@@ -197,6 +197,18 @@ pub fn init_dispatch(app: tauri::AppHandle) {
     PROTOCOL_READY.store(true, Ordering::SeqCst);
 }
 
+/// The app handle for services without a command context (e.g. the
+/// TaskDialog owner window lookup in native_host).
+pub fn current_app_handle() -> Option<&'static tauri::AppHandle> {
+    APP_HANDLE.get()
+}
+
+/// Decode a base64 string (exposed for native_host's image clipboard path,
+/// where the renderer sends PNG bytes as base64).
+pub fn vsbuffer_b64_decode(input: &str) -> Option<Vec<u8>> {
+    base64_decode(input)
+}
+
 /// Route an ipcRenderer call. `kind` is `"send"` (fire and forget) or
 /// `"invoke"` (expects a response).
 pub fn route(

@@ -14,22 +14,30 @@
 
 use serde_json::{json, Map, Value};
 use std::path::{Path, PathBuf};
-use std::sync::OnceLock;
+use std::sync::RwLock;
 
-static WINDOW_CONFIG: OnceLock<Value> = OnceLock::new();
+static WINDOW_CONFIG: RwLock<Option<Value>> = RwLock::new(None);
 
 /// Build and cache the window configuration. Called once from `setup` before
 /// the workbench window loads.
 pub fn init(app: &tauri::AppHandle) {
     let value = build(app);
-    if WINDOW_CONFIG.set(value).is_err() {
+    let mut guard = WINDOW_CONFIG.write().unwrap_or_else(|poisoned| poisoned.into_inner());
+    if guard.is_some() {
         crate::logger::log_app("warn", "window configuration initialized twice");
+    } else {
+        *guard = Some(value);
     }
 }
 
-/// Cached configuration (None until `init` ran).
-pub fn window_config() -> Option<&'static Value> {
-    WINDOW_CONFIG.get()
+/// Cached configuration (None until `init` ran). Cloned out because the
+/// configuration became mutable: `openWindow` / the pick*AndOpen dialogs
+/// rewrite the workspace/file fields and reload the window.
+pub fn window_config() -> Option<Value> {
+    WINDOW_CONFIG
+        .read()
+        .ok()
+        .and_then(|guard| guard.clone())
 }
 
 pub fn user_env() -> Value {
@@ -39,6 +47,84 @@ pub fn user_env() -> Value {
             .cloned()
             .unwrap_or_else(|| json!({})),
         None => json!({}),
+    }
+}
+
+/// Apply `IWindowOpenable[]` (nativeHost `openWindow` / pick*AndOpen) to
+/// the configuration so the next workbench boot opens them: the LAST
+/// folder/workspace wins (upstream semantics — one workspace container per
+/// window), files accumulate into `filesToOpenOrCreate`. Returns true when
+/// the configuration changed and the window should reload.
+pub fn apply_window_openables(openables: &[Value]) -> bool {
+    let Some(config) = window_config() else {
+        return false;
+    };
+    let mut map = match config {
+        Value::Object(map) => map,
+        _ => return false,
+    };
+
+    let mut changed = false;
+    for openable in openables {
+        if let Some(file_uri) = openable.get("fileUri") {
+            // IPathToOpen: { fileUri, line?, column? }
+            let mut entry = Map::new();
+            entry.insert("fileUri".to_string(), file_uri.clone());
+            if let Some(line) = openable.get("line") {
+                entry.insert("line".to_string(), line.clone());
+            }
+            if let Some(column) = openable.get("column") {
+                entry.insert("column".to_string(), column.clone());
+            }
+            let files = map
+                .entry("filesToOpenOrCreate")
+                .or_insert_with(|| json!([]));
+            if let Some(list) = files.as_array_mut() {
+                list.push(Value::Object(entry));
+                changed = true;
+            }
+        } else if let Some(folder_uri) = openable.get("folderUri") {
+            map.insert("folderUri".to_string(), folder_uri.clone());
+            map.insert("workspace".to_string(), Value::Null);
+            changed = true;
+        } else if let Some(workspace_uri) = openable.get("workspaceUri") {
+            // IWorkspaceIdentifier: id = md5(lowercased fsPath off Linux),
+            // configPath = the workspace .code-workspace URI.
+            let fs_path = uri_fs_path(workspace_uri);
+            let id_input = if cfg!(target_os = "linux") {
+                fs_path.clone()
+            } else {
+                fs_path.to_lowercase()
+            };
+            map.insert(
+                "workspace".to_string(),
+                json!({
+                    "id": crate::util::md5_hex(&id_input),
+                    "configPath": workspace_uri.clone(),
+                }),
+            );
+            map.insert("folderUri".to_string(), Value::Null);
+            changed = true;
+        }
+    }
+
+    if changed {
+        if let Ok(mut guard) = WINDOW_CONFIG.write() {
+            *guard = Some(Value::Object(map));
+        }
+    }
+    changed
+}
+
+/// UriComponents -> filesystem path (fsPath semantics, enough for hashing
+/// and dialog default paths).
+fn uri_fs_path(uri: &Value) -> String {
+    let raw = uri.get("path").and_then(Value::as_str).unwrap_or("");
+    let decoded = crate::util::percent_decode(raw);
+    if cfg!(windows) {
+        decoded.trim_start_matches('/').replace('/', "\\")
+    } else {
+        decoded
     }
 }
 

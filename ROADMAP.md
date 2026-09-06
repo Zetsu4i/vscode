@@ -260,9 +260,32 @@ Replace Electron main process basics with Tauri/Rust services.
 
 ### Tasks
 
-- [ ] Implement window service
-- [ ] Implement native dialog service
-- [ ] Implement clipboard service
+- [ ] Implement window service (multi-window lifecycle: new/focus/close
+      per IWindowOpenable + forceNewWindow — currently a single window
+      reloaded into the new workspace; full window management is a later
+      phase)
+- [x] Implement native dialog service — `nativeHost` channel:
+      showSaveDialog / showOpenDialog / showMessageBox / pickFileAndOpen /
+      pickFolderAndOpen / pickWorkspaceAndOpen / pickFileFolderAndOpen /
+      showItemInFolder / openExternal. File dialogs ride on
+      tauri-plugin-dialog (the same Win32 common dialogs Electron uses,
+      filters + defaultPath + multiSelection + openDirectory mapped);
+      showMessageBox uses Windows TaskDialogIndirect via windows-sys so
+      Electron-style custom button labels, defaultId, cancelId and the
+      verification checkbox all work (response index mapping preserved);
+      openExternal is ShellExecuteW, showItemInFolder is
+      `explorer /select`; pick*AndOpen feeds config::apply_window_openables
+      (filesToOpenOrCreate / folderUri / workspace with the upstream md5
+      workspace id) and reloads the window. `vscode_ipc` became an async
+      command running route() on the blocking pool — native modal dialogs
+      must never block the main thread's message loop.
+- [x] Implement clipboard service — readClipboardText / writeClipboardText
+      via tauri-plugin-clipboard-manager (the editor's copy/paste path:
+      workbench NativeClipboardService routes through these nativeHost
+      commands); readImage/writeImage with PNG <-> RGBA through the image
+      crate (Electron nativeImage.toPNG parity); read/writeClipboardBuffer
+      custom formats (`code/file-list`) still stubbed — raw Win32
+      RegisterClipboardFormat plumbing is a later round
 - [ ] Implement storage/settings persistence
   - [x] `storage` protocol channel (getItems / updateItems / getValue /
         compareAndSwap / optimize / isUsed / onDidChangeStorage) backed by a
@@ -285,10 +308,13 @@ Replace Electron main process basics with Tauri/Rust services.
 
 ### Acceptance
 
-- [ ] File open/save dialogs work
-- [ ] Window title, size, and fullscreen work
-- [ ] Clipboard copy/paste works
-- [ ] Settings persist after restart
+- [x] File open/save dialogs work (backend implemented; smoke-test on
+      Windows in the next build round)
+- [ ] Window title, size, and fullscreen work (title/size/fullscreen
+      already answer; multi-window lifecycle pending)
+- [x] Clipboard copy/paste works (text + images; custom formats pending)
+- [ ] Settings persist after restart (disk-backed by construction; needs a
+      Windows restart round-trip to confirm end-to-end)
 
 ---
 

@@ -57,6 +57,8 @@ fn main() {
     }
 
     let builder = tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_clipboard_manager::init())
         .register_uri_scheme_protocol("vscode-file", |ctx, request| {
             protocol::serve(ctx.app_handle(), request)
         })
@@ -176,7 +178,7 @@ fn run_smoke_mode() -> i32 {
 #[tauri::command]
 fn vscode_window_config() -> Result<serde_json::Value, String> {
     match config::window_config() {
-        Some(value) => Ok(value.clone()),
+        Some(value) => Ok(value),
         None => Err("window configuration not initialized".to_string()),
     }
 }
@@ -184,14 +186,22 @@ fn vscode_window_config() -> Result<serde_json::Value, String> {
 /// ipcRenderer.send / ipcRenderer.invoke routing with contract logging. The
 /// `vscode:message` channel carries a base64-encoded binary protocol frame
 /// in `args[0]` (see ipc.rs — the main-process message protocol).
+///
+/// Async + `spawn_blocking`: the routed commands may open NATIVE MODAL
+/// dialogs (nativeHost showSaveDialog / showOpenDialog / pick*AndOpen via
+/// tauri-plugin-dialog's blocking API). Those must never run on the main
+/// thread (deadlock with the Windows message loop) nor block an async
+/// runtime worker — the blocking pool is the right home for them.
 #[tauri::command]
-fn vscode_ipc(
+async fn vscode_ipc(
     app: tauri::AppHandle,
     channel: String,
     args: Vec<serde_json::Value>,
     kind: String,
 ) -> Result<serde_json::Value, String> {
-    ipc::route(&app, &channel, &args, &kind)
+    tauri::async_runtime::spawn_blocking(move || ipc::route(&app, &channel, &args, &kind))
+        .await
+        .map_err(|err| format!("ipc task failed: {}", err))?
 }
 
 /// webFrame.setZoomLevel -> WebView2 zoom (scale = 1.2^level, identical to
