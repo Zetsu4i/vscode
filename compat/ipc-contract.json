@@ -1,0 +1,2971 @@
+{
+  "generatedAt": "2026-09-06T20:35:05.928Z",
+  "upstreamVersion": "1.138.0",
+  "summary": {
+    "filesScanned": 8824,
+    "plainChannelsProduct": 49,
+    "plainChannelsTestOnly": 2,
+    "protocolChannelsProduct": 56,
+    "protocolChannelsTestOnly": 5,
+    "dynamicChannelCalls": 113,
+    "mountainChannelsImplemented": 7
+  },
+  "plainChannels": {
+    "vscode:accessibilitySupportChanged": {
+      "kinds": [
+        "renderer:on"
+      ],
+      "testOnly": false,
+      "refs": [
+        {
+          "file": "src/vs/workbench/electron-browser/window.ts",
+          "kind": "renderer:on",
+          "side": "renderer",
+          "test": false
+        }
+      ]
+    },
+    "vscode:addRemoveFolders": {
+      "kinds": [
+        "renderer:on"
+      ],
+      "testOnly": false,
+      "refs": [
+        {
+          "file": "src/vs/workbench/electron-browser/window.ts",
+          "kind": "renderer:on",
+          "side": "renderer",
+          "test": false
+        }
+      ]
+    },
+    "vscode:browserView:areaPicked": {
+      "kinds": [
+        "renderer:send"
+      ],
+      "testOnly": false,
+      "refs": [
+        {
+          "file": "src/vs/platform/browserView/electron-browser/preload-browserView.ts",
+          "kind": "renderer:send",
+          "side": "renderer",
+          "test": false
+        }
+      ]
+    },
+    "vscode:browserView:areaPickStopped": {
+      "kinds": [
+        "renderer:send"
+      ],
+      "testOnly": false,
+      "refs": [
+        {
+          "file": "src/vs/platform/browserView/electron-browser/preload-browserView.ts",
+          "kind": "renderer:send",
+          "side": "renderer",
+          "test": false
+        }
+      ]
+    },
+    "vscode:browserView:elementCommentRemoved": {
+      "kinds": [
+        "renderer:send"
+      ],
+      "testOnly": false,
+      "refs": [
+        {
+          "file": "src/vs/platform/browserView/electron-browser/preload-browserView.ts",
+          "kind": "renderer:send",
+          "side": "renderer",
+          "test": false
+        }
+      ]
+    },
+    "vscode:browserView:elementPicked": {
+      "kinds": [
+        "renderer:send"
+      ],
+      "testOnly": false,
+      "refs": [
+        {
+          "file": "src/vs/platform/browserView/electron-browser/preload-browserView.ts",
+          "kind": "renderer:send",
+          "side": "renderer",
+          "test": false
+        }
+      ]
+    },
+    "vscode:browserView:elementPickStopped": {
+      "kinds": [
+        "renderer:send"
+      ],
+      "testOnly": false,
+      "refs": [
+        {
+          "file": "src/vs/platform/browserView/electron-browser/preload-browserView.ts",
+          "kind": "renderer:send",
+          "side": "renderer",
+          "test": false
+        }
+      ]
+    },
+    "vscode:browserView:hideHighlight": {
+      "kinds": [
+        "renderer:on"
+      ],
+      "testOnly": false,
+      "refs": [
+        {
+          "file": "src/vs/platform/browserView/electron-browser/preload-browserView.ts",
+          "kind": "renderer:on",
+          "side": "renderer",
+          "test": false
+        }
+      ]
+    },
+    "vscode:browserView:highlightElement": {
+      "kinds": [
+        "renderer:on"
+      ],
+      "testOnly": false,
+      "refs": [
+        {
+          "file": "src/vs/platform/browserView/electron-browser/preload-browserView.ts",
+          "kind": "renderer:on",
+          "side": "renderer",
+          "test": false
+        }
+      ]
+    },
+    "vscode:browserView:keydown": {
+      "kinds": [
+        "renderer:send"
+      ],
+      "testOnly": false,
+      "refs": [
+        {
+          "file": "src/vs/platform/browserView/electron-browser/preload-browserView.ts",
+          "kind": "renderer:send",
+          "side": "renderer",
+          "test": false
+        }
+      ]
+    },
+    "vscode:browserView:preloadReady": {
+      "kinds": [
+        "renderer:send"
+      ],
+      "testOnly": false,
+      "refs": [
+        {
+          "file": "src/vs/platform/browserView/electron-browser/preload-browserView.ts",
+          "kind": "renderer:send",
+          "side": "renderer",
+          "test": false
+        }
+      ]
+    },
+    "vscode:browserView:setElementComments": {
+      "kinds": [
+        "renderer:on"
+      ],
+      "testOnly": false,
+      "refs": [
+        {
+          "file": "src/vs/platform/browserView/electron-browser/preload-browserView.ts",
+          "kind": "renderer:on",
+          "side": "renderer",
+          "test": false
+        }
+      ]
+    },
+    "vscode:browserView:setLocalizedStrings": {
+      "kinds": [
+        "renderer:on"
+      ],
+      "testOnly": false,
+      "refs": [
+        {
+          "file": "src/vs/platform/browserView/electron-browser/preload-browserView.ts",
+          "kind": "renderer:on",
+          "side": "renderer",
+          "test": false
+        }
+      ]
+    },
+    "vscode:browserView:setTheme": {
+      "kinds": [
+        "renderer:on"
+      ],
+      "testOnly": false,
+      "refs": [
+        {
+          "file": "src/vs/platform/browserView/electron-browser/preload-browserView.ts",
+          "kind": "renderer:on",
+          "side": "renderer",
+          "test": false
+        }
+      ]
+    },
+    "vscode:browserView:showElementComment": {
+      "kinds": [
+        "renderer:on"
+      ],
+      "testOnly": false,
+      "refs": [
+        {
+          "file": "src/vs/platform/browserView/electron-browser/preload-browserView.ts",
+          "kind": "renderer:on",
+          "side": "renderer",
+          "test": false
+        }
+      ]
+    },
+    "vscode:browserView:startAreaPicker": {
+      "kinds": [
+        "renderer:on"
+      ],
+      "testOnly": false,
+      "refs": [
+        {
+          "file": "src/vs/platform/browserView/electron-browser/preload-browserView.ts",
+          "kind": "renderer:on",
+          "side": "renderer",
+          "test": false
+        }
+      ]
+    },
+    "vscode:browserView:startElementPicker": {
+      "kinds": [
+        "renderer:on"
+      ],
+      "testOnly": false,
+      "refs": [
+        {
+          "file": "src/vs/platform/browserView/electron-browser/preload-browserView.ts",
+          "kind": "renderer:on",
+          "side": "renderer",
+          "test": false
+        }
+      ]
+    },
+    "vscode:browserView:stopAreaPicker": {
+      "kinds": [
+        "renderer:on"
+      ],
+      "testOnly": false,
+      "refs": [
+        {
+          "file": "src/vs/platform/browserView/electron-browser/preload-browserView.ts",
+          "kind": "renderer:on",
+          "side": "renderer",
+          "test": false
+        }
+      ]
+    },
+    "vscode:browserView:stopElementPicker": {
+      "kinds": [
+        "renderer:on"
+      ],
+      "testOnly": false,
+      "refs": [
+        {
+          "file": "src/vs/platform/browserView/electron-browser/preload-browserView.ts",
+          "kind": "renderer:on",
+          "side": "renderer",
+          "test": false
+        }
+      ]
+    },
+    "vscode:configureAllowedUNCHost": {
+      "kinds": [
+        "renderer:on"
+      ],
+      "testOnly": false,
+      "refs": [
+        {
+          "file": "src/vs/workbench/electron-browser/window.ts",
+          "kind": "renderer:on",
+          "side": "renderer",
+          "test": false
+        }
+      ]
+    },
+    "vscode:createAgentHostMessageChannel": {
+      "kinds": [
+        "main:on",
+        "main:removeListener"
+      ],
+      "testOnly": false,
+      "refs": [
+        {
+          "file": "src/vs/platform/agentHost/electron-main/electronAgentHostStarter.ts",
+          "kind": "main:on",
+          "side": "electron-main",
+          "test": false
+        },
+        {
+          "file": "src/vs/platform/agentHost/electron-main/electronAgentHostStarter.ts",
+          "kind": "main:removeListener",
+          "side": "electron-main",
+          "test": false
+        }
+      ]
+    },
+    "vscode:createMessageChannel": {
+      "kinds": [
+        "main:push"
+      ],
+      "testOnly": false,
+      "refs": [
+        {
+          "file": "src/vs/base/parts/ipc/electron-main/ipc.mp.ts",
+          "kind": "main:push",
+          "side": "electron-main",
+          "test": false
+        }
+      ]
+    },
+    "vscode:createPtyHostMessageChannel": {
+      "kinds": [
+        "main:on",
+        "main:removeHandler"
+      ],
+      "testOnly": false,
+      "refs": [
+        {
+          "file": "src/vs/platform/terminal/electron-main/electronPtyHostStarter.ts",
+          "kind": "main:on",
+          "side": "electron-main",
+          "test": false
+        },
+        {
+          "file": "src/vs/platform/terminal/electron-main/electronPtyHostStarter.ts",
+          "kind": "main:removeHandler",
+          "side": "electron-main",
+          "test": false
+        }
+      ]
+    },
+    "vscode:disablePromptForProtocolHandling": {
+      "kinds": [
+        "renderer:on"
+      ],
+      "testOnly": false,
+      "refs": [
+        {
+          "file": "src/vs/workbench/electron-browser/window.ts",
+          "kind": "renderer:on",
+          "side": "renderer",
+          "test": false
+        }
+      ]
+    },
+    "vscode:enterFullScreen": {
+      "kinds": [
+        "renderer:on"
+      ],
+      "testOnly": false,
+      "refs": [
+        {
+          "file": "src/vs/workbench/electron-browser/window.ts",
+          "kind": "renderer:on",
+          "side": "renderer",
+          "test": false
+        }
+      ]
+    },
+    "vscode:fetchShellEnv": {
+      "kinds": [
+        "main:handle",
+        "renderer:invoke"
+      ],
+      "testOnly": false,
+      "refs": [
+        {
+          "file": "src/vs/base/parts/sandbox/electron-browser/preload.ts",
+          "kind": "renderer:invoke",
+          "side": "renderer",
+          "test": false
+        },
+        {
+          "file": "src/vs/code/electron-main/app.ts",
+          "kind": "main:handle",
+          "side": "electron-main",
+          "test": false
+        }
+      ]
+    },
+    "vscode:getDiagnosticInfo": {
+      "kinds": [
+        "renderer:on"
+      ],
+      "testOnly": false,
+      "refs": [
+        {
+          "file": "src/vs/workbench/contrib/remote/electron-browser/remote.contribution.ts",
+          "kind": "renderer:on",
+          "side": "renderer",
+          "test": false
+        }
+      ]
+    },
+    "vscode:handleChatRequest": {
+      "kinds": [
+        "renderer:on",
+        "renderer:removeListener"
+      ],
+      "testOnly": false,
+      "refs": [
+        {
+          "file": "src/vs/workbench/contrib/chat/electron-browser/chat.contribution.ts",
+          "kind": "renderer:on",
+          "side": "renderer",
+          "test": false
+        },
+        {
+          "file": "src/vs/workbench/contrib/chat/electron-browser/chat.contribution.ts",
+          "kind": "renderer:removeListener",
+          "side": "renderer",
+          "test": false
+        }
+      ]
+    },
+    "vscode:hello": {
+      "kinds": [
+        "renderer:send"
+      ],
+      "testOnly": false,
+      "refs": [
+        {
+          "file": "src/vs/base/parts/ipc/electron-browser/ipc.electron.ts",
+          "kind": "renderer:send",
+          "side": "renderer",
+          "test": false
+        }
+      ]
+    },
+    "vscode:leaveFullScreen": {
+      "kinds": [
+        "renderer:on"
+      ],
+      "testOnly": false,
+      "refs": [
+        {
+          "file": "src/vs/workbench/electron-browser/window.ts",
+          "kind": "renderer:on",
+          "side": "renderer",
+          "test": false
+        }
+      ]
+    },
+    "vscode:notifyZoomLevel": {
+      "kinds": [
+        "main:handle",
+        "renderer:invoke"
+      ],
+      "testOnly": false,
+      "refs": [
+        {
+          "file": "src/vs/code/electron-main/app.ts",
+          "kind": "main:handle",
+          "side": "electron-main",
+          "test": false
+        },
+        {
+          "file": "src/vs/workbench/electron-browser/window.ts",
+          "kind": "renderer:invoke",
+          "side": "renderer",
+          "test": false
+        }
+      ]
+    },
+    "vscode:onBeforeUnload": {
+      "kinds": [
+        "renderer:on"
+      ],
+      "testOnly": false,
+      "refs": [
+        {
+          "file": "src/vs/workbench/services/lifecycle/electron-browser/lifecycleService.ts",
+          "kind": "renderer:on",
+          "side": "renderer",
+          "test": false
+        }
+      ]
+    },
+    "vscode:onWillUnload": {
+      "kinds": [
+        "renderer:on"
+      ],
+      "testOnly": false,
+      "refs": [
+        {
+          "file": "src/vs/workbench/services/lifecycle/electron-browser/lifecycleService.ts",
+          "kind": "renderer:on",
+          "side": "renderer",
+          "test": false
+        }
+      ]
+    },
+    "vscode:openChatSession": {
+      "kinds": [
+        "renderer:on",
+        "renderer:removeListener"
+      ],
+      "testOnly": false,
+      "refs": [
+        {
+          "file": "src/vs/workbench/contrib/chat/electron-browser/chat.contribution.ts",
+          "kind": "renderer:on",
+          "side": "renderer",
+          "test": false
+        },
+        {
+          "file": "src/vs/workbench/contrib/chat/electron-browser/chat.contribution.ts",
+          "kind": "renderer:removeListener",
+          "side": "renderer",
+          "test": false
+        }
+      ]
+    },
+    "vscode:openDevTools": {
+      "kinds": [
+        "main:on",
+        "renderer:send"
+      ],
+      "testOnly": false,
+      "refs": [
+        {
+          "file": "src/vs/code/electron-browser/workbench/workbench.ts",
+          "kind": "renderer:send",
+          "side": "renderer",
+          "test": false
+        },
+        {
+          "file": "src/vs/code/electron-main/app.ts",
+          "kind": "main:on",
+          "side": "electron-main",
+          "test": false
+        },
+        {
+          "file": "src/vs/sessions/electron-browser/sessions.ts",
+          "kind": "renderer:send",
+          "side": "renderer",
+          "test": false
+        }
+      ]
+    },
+    "vscode:openFiles": {
+      "kinds": [
+        "renderer:on"
+      ],
+      "testOnly": false,
+      "refs": [
+        {
+          "file": "src/vs/workbench/contrib/terminal/electron-browser/terminalNativeContribution.ts",
+          "kind": "renderer:on",
+          "side": "renderer",
+          "test": false
+        },
+        {
+          "file": "src/vs/workbench/electron-browser/window.ts",
+          "kind": "renderer:on",
+          "side": "renderer",
+          "test": false
+        }
+      ]
+    },
+    "vscode:openProxyAuthenticationDialog": {
+      "kinds": [
+        "renderer:on"
+      ],
+      "testOnly": false,
+      "refs": [
+        {
+          "file": "src/vs/workbench/electron-browser/window.ts",
+          "kind": "renderer:on",
+          "side": "renderer",
+          "test": false
+        }
+      ]
+    },
+    "vscode:readFile": {
+      "kinds": [
+        "renderer:invoke"
+      ],
+      "testOnly": true,
+      "refs": [
+        {
+          "file": "src/vs/workbench/test/electron-browser/workbenchTestServices.ts",
+          "kind": "renderer:invoke",
+          "side": "renderer",
+          "test": true
+        }
+      ]
+    },
+    "vscode:registerAuxiliaryWindow": {
+      "kinds": [
+        "main:handle"
+      ],
+      "testOnly": false,
+      "refs": [
+        {
+          "file": "src/vs/platform/auxiliaryWindow/electron-main/auxiliaryWindowsMainService.ts",
+          "kind": "main:handle",
+          "side": "electron-main",
+          "test": false
+        }
+      ]
+    },
+    "vscode:reloadWindow": {
+      "kinds": [
+        "main:on",
+        "renderer:send"
+      ],
+      "testOnly": false,
+      "refs": [
+        {
+          "file": "src/vs/code/electron-browser/workbench/workbench.ts",
+          "kind": "renderer:send",
+          "side": "renderer",
+          "test": false
+        },
+        {
+          "file": "src/vs/code/electron-main/app.ts",
+          "kind": "main:on",
+          "side": "electron-main",
+          "test": false
+        },
+        {
+          "file": "src/vs/sessions/electron-browser/sessions.ts",
+          "kind": "renderer:send",
+          "side": "renderer",
+          "test": false
+        }
+      ]
+    },
+    "vscode:reportSharedProcessCrash": {
+      "kinds": [
+        "renderer:on"
+      ],
+      "testOnly": false,
+      "refs": [
+        {
+          "file": "src/vs/workbench/electron-browser/window.ts",
+          "kind": "renderer:on",
+          "side": "renderer",
+          "test": false
+        }
+      ]
+    },
+    "vscode:runAction": {
+      "kinds": [
+        "renderer:on"
+      ],
+      "testOnly": false,
+      "refs": [
+        {
+          "file": "src/vs/workbench/electron-browser/window.ts",
+          "kind": "renderer:on",
+          "side": "renderer",
+          "test": false
+        }
+      ]
+    },
+    "vscode:runKeybinding": {
+      "kinds": [
+        "renderer:on"
+      ],
+      "testOnly": false,
+      "refs": [
+        {
+          "file": "src/vs/workbench/electron-browser/window.ts",
+          "kind": "renderer:on",
+          "side": "renderer",
+          "test": false
+        }
+      ]
+    },
+    "vscode:selectAgentsFolder": {
+      "kinds": [
+        "renderer:on",
+        "renderer:removeListener"
+      ],
+      "testOnly": false,
+      "refs": [
+        {
+          "file": "src/vs/sessions/contrib/chat/electron-browser/chat.contribution.ts",
+          "kind": "renderer:on",
+          "side": "renderer",
+          "test": false
+        },
+        {
+          "file": "src/vs/sessions/contrib/chat/electron-browser/chat.contribution.ts",
+          "kind": "renderer:removeListener",
+          "side": "renderer",
+          "test": false
+        }
+      ]
+    },
+    "vscode:showArgvParseWarning": {
+      "kinds": [
+        "renderer:on"
+      ],
+      "testOnly": false,
+      "refs": [
+        {
+          "file": "src/vs/workbench/electron-browser/window.ts",
+          "kind": "renderer:on",
+          "side": "renderer",
+          "test": false
+        }
+      ]
+    },
+    "vscode:showCredentialsError": {
+      "kinds": [
+        "renderer:on"
+      ],
+      "testOnly": false,
+      "refs": [
+        {
+          "file": "src/vs/workbench/electron-browser/window.ts",
+          "kind": "renderer:on",
+          "side": "renderer",
+          "test": false
+        }
+      ]
+    },
+    "vscode:showInfoMessage": {
+      "kinds": [
+        "renderer:on"
+      ],
+      "testOnly": false,
+      "refs": [
+        {
+          "file": "src/vs/workbench/electron-browser/window.ts",
+          "kind": "renderer:on",
+          "side": "renderer",
+          "test": false
+        }
+      ]
+    },
+    "vscode:showResolveShellEnvError": {
+      "kinds": [
+        "renderer:on"
+      ],
+      "testOnly": false,
+      "refs": [
+        {
+          "file": "src/vs/workbench/electron-browser/window.ts",
+          "kind": "renderer:on",
+          "side": "renderer",
+          "test": false
+        }
+      ]
+    },
+    "vscode:showTranslatedBuildWarning": {
+      "kinds": [
+        "renderer:on"
+      ],
+      "testOnly": false,
+      "refs": [
+        {
+          "file": "src/vs/workbench/electron-browser/window.ts",
+          "kind": "renderer:on",
+          "side": "renderer",
+          "test": false
+        }
+      ]
+    },
+    "vscode:statFile": {
+      "kinds": [
+        "renderer:invoke"
+      ],
+      "testOnly": true,
+      "refs": [
+        {
+          "file": "src/vs/workbench/test/electron-browser/workbenchTestServices.ts",
+          "kind": "renderer:invoke",
+          "side": "renderer",
+          "test": true
+        }
+      ]
+    },
+    "vscode:toggleDevTools": {
+      "kinds": [
+        "main:on",
+        "renderer:send"
+      ],
+      "testOnly": false,
+      "refs": [
+        {
+          "file": "src/vs/code/electron-browser/workbench/workbench.ts",
+          "kind": "renderer:send",
+          "side": "renderer",
+          "test": false
+        },
+        {
+          "file": "src/vs/code/electron-main/app.ts",
+          "kind": "main:on",
+          "side": "electron-main",
+          "test": false
+        },
+        {
+          "file": "src/vs/sessions/electron-browser/sessions.ts",
+          "kind": "renderer:send",
+          "side": "renderer",
+          "test": false
+        }
+      ]
+    }
+  },
+  "protocolChannels": {
+    "agentHost": {
+      "registered": false,
+      "consumed": true,
+      "testOnly": false,
+      "mountain": "not-implemented",
+      "refs": [
+        {
+          "file": "src/vs/platform/agentHost/browser/agentHostIpcChannelTransport.ts",
+          "kind": "client:get",
+          "side": "renderer",
+          "test": false
+        }
+      ]
+    },
+    "browserView": {
+      "registered": true,
+      "consumed": true,
+      "testOnly": false,
+      "mountain": "not-implemented",
+      "refs": [
+        {
+          "file": "src/vs/code/electron-main/app.ts",
+          "kind": "server:register",
+          "side": "electron-main",
+          "test": false,
+          "constant": "ipcBrowserViewChannelName"
+        },
+        {
+          "file": "src/vs/code/electron-main/app.ts",
+          "kind": "server:register",
+          "side": "electron-main",
+          "test": false,
+          "constant": "ipcBrowserViewChannelName"
+        },
+        {
+          "file": "src/vs/workbench/contrib/browserView/electron-browser/browserViewWorkbenchService.ts",
+          "kind": "client:get",
+          "side": "renderer",
+          "test": false,
+          "constant": "ipcBrowserViewChannelName"
+        }
+      ]
+    },
+    "browserViewGroup": {
+      "registered": true,
+      "consumed": true,
+      "testOnly": false,
+      "mountain": "not-implemented",
+      "refs": [
+        {
+          "file": "src/vs/code/electron-main/app.ts",
+          "kind": "server:register",
+          "side": "electron-main",
+          "test": false,
+          "constant": "ipcBrowserViewGroupChannelName"
+        },
+        {
+          "file": "src/vs/code/electron-main/app.ts",
+          "kind": "server:register",
+          "side": "electron-main",
+          "test": false,
+          "constant": "ipcBrowserViewGroupChannelName"
+        },
+        {
+          "file": "src/vs/platform/browserView/node/browserViewGroupRemoteService.ts",
+          "kind": "client:get",
+          "side": "node-main",
+          "test": false,
+          "constant": "ipcBrowserViewGroupChannelName"
+        },
+        {
+          "file": "src/vs/workbench/contrib/browserView/electron-browser/browserViewCDPService.ts",
+          "kind": "client:get",
+          "side": "renderer",
+          "test": false,
+          "constant": "ipcBrowserViewGroupChannelName"
+        }
+      ]
+    },
+    "channel": {
+      "registered": false,
+      "consumed": false,
+      "testOnly": true,
+      "mountain": "not-implemented",
+      "refs": [
+        {
+          "file": "src/vs/base/parts/ipc/test/common/ipc.test.ts",
+          "kind": "server:register",
+          "side": "common",
+          "test": true
+        },
+        {
+          "file": "src/vs/base/parts/ipc/test/common/ipc.test.ts",
+          "kind": "server:register",
+          "side": "common",
+          "test": true
+        },
+        {
+          "file": "src/vs/base/parts/ipc/test/common/ipc.test.ts",
+          "kind": "server:register",
+          "side": "common",
+          "test": true
+        },
+        {
+          "file": "src/vs/base/parts/ipc/test/common/ipc.test.ts",
+          "kind": "client:get",
+          "side": "common",
+          "test": true
+        },
+        {
+          "file": "src/vs/base/parts/ipc/test/common/ipc.test.ts",
+          "kind": "client:get",
+          "side": "common",
+          "test": true
+        },
+        {
+          "file": "src/vs/base/parts/ipc/test/common/ipc.test.ts",
+          "kind": "client:get",
+          "side": "common",
+          "test": true
+        }
+      ]
+    },
+    "checksum": {
+      "registered": true,
+      "consumed": false,
+      "testOnly": false,
+      "mountain": "not-implemented",
+      "refs": [
+        {
+          "file": "src/vs/code/electron-utility/sharedProcess/sharedProcessMain.ts",
+          "kind": "server:register",
+          "side": "shared-process",
+          "test": false
+        }
+      ]
+    },
+    "client1": {
+      "registered": false,
+      "consumed": false,
+      "testOnly": true,
+      "mountain": "not-implemented",
+      "refs": [
+        {
+          "file": "src/vs/base/parts/ipc/test/browser/ipc.mp.test.ts",
+          "kind": "server:register",
+          "side": "renderer",
+          "test": true
+        },
+        {
+          "file": "src/vs/base/parts/ipc/test/browser/ipc.mp.test.ts",
+          "kind": "client:get",
+          "side": "renderer",
+          "test": true
+        }
+      ]
+    },
+    "client2": {
+      "registered": false,
+      "consumed": false,
+      "testOnly": true,
+      "mountain": "not-implemented",
+      "refs": [
+        {
+          "file": "src/vs/base/parts/ipc/test/browser/ipc.mp.test.ts",
+          "kind": "server:register",
+          "side": "renderer",
+          "test": true
+        },
+        {
+          "file": "src/vs/base/parts/ipc/test/browser/ipc.mp.test.ts",
+          "kind": "client:get",
+          "side": "renderer",
+          "test": true
+        }
+      ]
+    },
+    "customEndpointTelemetry": {
+      "registered": true,
+      "consumed": false,
+      "testOnly": false,
+      "mountain": "not-implemented",
+      "refs": [
+        {
+          "file": "src/vs/code/electron-utility/sharedProcess/sharedProcessMain.ts",
+          "kind": "server:register",
+          "side": "shared-process",
+          "test": false
+        }
+      ]
+    },
+    "diagnostics": {
+      "registered": true,
+      "consumed": true,
+      "testOnly": false,
+      "mountain": "not-implemented",
+      "refs": [
+        {
+          "file": "src/vs/code/electron-main/app.ts",
+          "kind": "server:register",
+          "side": "electron-main",
+          "test": false
+        },
+        {
+          "file": "src/vs/code/electron-main/app.ts",
+          "kind": "client:get",
+          "side": "electron-main",
+          "test": false
+        },
+        {
+          "file": "src/vs/code/electron-main/main.ts",
+          "kind": "client:get",
+          "side": "electron-main",
+          "test": false
+        },
+        {
+          "file": "src/vs/code/electron-utility/sharedProcess/sharedProcessMain.ts",
+          "kind": "server:register",
+          "side": "shared-process",
+          "test": false
+        }
+      ]
+    },
+    "download": {
+      "registered": true,
+      "consumed": true,
+      "testOnly": false,
+      "mountain": "not-implemented",
+      "refs": [
+        {
+          "file": "src/vs/server/node/serverServices.ts",
+          "kind": "client:get",
+          "side": "node-main",
+          "test": false
+        },
+        {
+          "file": "src/vs/workbench/contrib/remote/common/remote.contribution.ts",
+          "kind": "server:register",
+          "side": "common",
+          "test": false
+        }
+      ]
+    },
+    "encryption": {
+      "registered": true,
+      "consumed": false,
+      "testOnly": false,
+      "mountain": "not-implemented",
+      "refs": [
+        {
+          "file": "src/vs/code/electron-main/app.ts",
+          "kind": "server:register",
+          "side": "electron-main",
+          "test": false
+        }
+      ],
+      "proxyService": {
+        "methods": [],
+        "events": [],
+        "note": "secret storage"
+      }
+    },
+    "extensionGalleryManifest": {
+      "registered": true,
+      "consumed": true,
+      "testOnly": false,
+      "mountain": "not-implemented",
+      "refs": [
+        {
+          "file": "src/vs/platform/extensionManagement/common/extensionGalleryManifestServiceIpc.ts",
+          "kind": "server:register",
+          "side": "common",
+          "test": false
+        },
+        {
+          "file": "src/vs/workbench/services/extensionManagement/browser/extensionGalleryManifestService.ts",
+          "kind": "client:get",
+          "side": "renderer",
+          "test": false
+        },
+        {
+          "file": "src/vs/workbench/services/extensionManagement/electron-browser/extensionGalleryManifestService.ts",
+          "kind": "client:get",
+          "side": "renderer",
+          "test": false
+        },
+        {
+          "file": "src/vs/workbench/services/extensionManagement/electron-browser/extensionGalleryManifestService.ts",
+          "kind": "client:get",
+          "side": "renderer",
+          "test": false
+        }
+      ]
+    },
+    "extensionhostdebugservice": {
+      "registered": true,
+      "consumed": false,
+      "testOnly": false,
+      "mountain": "not-implemented",
+      "refs": [
+        {
+          "file": "src/vs/code/electron-main/app.ts",
+          "kind": "server:register",
+          "side": "electron-main",
+          "test": false
+        }
+      ]
+    },
+    "extensionRecommendationNotification": {
+      "registered": true,
+      "consumed": true,
+      "testOnly": false,
+      "mountain": "not-implemented",
+      "refs": [
+        {
+          "file": "src/vs/code/electron-utility/sharedProcess/sharedProcessMain.ts",
+          "kind": "client:get",
+          "side": "shared-process",
+          "test": false
+        },
+        {
+          "file": "src/vs/workbench/contrib/extensions/electron-browser/extensions.contribution.ts",
+          "kind": "server:register",
+          "side": "renderer",
+          "test": false
+        }
+      ]
+    },
+    "extensions": {
+      "registered": true,
+      "consumed": true,
+      "testOnly": false,
+      "mountain": "not-implemented",
+      "refs": [
+        {
+          "file": "src/vs/code/electron-utility/sharedProcess/sharedProcessMain.ts",
+          "kind": "server:register",
+          "side": "shared-process",
+          "test": false
+        },
+        {
+          "file": "src/vs/server/node/serverServices.ts",
+          "kind": "server:register",
+          "side": "node-main",
+          "test": false
+        },
+        {
+          "file": "src/vs/workbench/services/extensionManagement/electron-browser/extensionManagementServerService.ts",
+          "kind": "client:get",
+          "side": "renderer",
+          "test": false
+        }
+      ],
+      "serverCommands": [
+        "onInstallExtension",
+        "onDidInstallExtensions",
+        "onUninstallExtension",
+        "onDidUninstallExtension",
+        "onDidUpdateExtensionMetadata",
+        "zip",
+        "install",
+        "installFromLocation",
+        "installExtensionsFromProfile",
+        "getManifest",
+        "getTargetPlatform",
+        "installFromGallery",
+        "installGalleryExtensions",
+        "uninstall",
+        "uninstallExtensions",
+        "getInstalled",
+        "toggleApplicationScope",
+        "copyExtensions",
+        "updateMetadata",
+        "resetPinnedStateForAllUserExtensions",
+        "getExtensionsControlManifest",
+        "download",
+        "cleanUp",
+        "getConfigBasedTips",
+        "getImportantExecutableBasedTips",
+        "getOtherExecutableBasedTips"
+      ]
+    },
+    "extensionTipsService": {
+      "registered": true,
+      "consumed": true,
+      "testOnly": false,
+      "mountain": "not-implemented",
+      "refs": [
+        {
+          "file": "src/vs/code/electron-utility/sharedProcess/sharedProcessMain.ts",
+          "kind": "server:register",
+          "side": "shared-process",
+          "test": false
+        },
+        {
+          "file": "src/vs/workbench/services/extensionManagement/electron-browser/extensionTipsService.ts",
+          "kind": "client:get",
+          "side": "renderer",
+          "test": false
+        }
+      ]
+    },
+    "externalTerminal": {
+      "registered": true,
+      "consumed": false,
+      "testOnly": false,
+      "mountain": "not-implemented",
+      "refs": [
+        {
+          "file": "src/vs/code/electron-main/app.ts",
+          "kind": "server:register",
+          "side": "electron-main",
+          "test": false
+        }
+      ]
+    },
+    "fileManagedSettings": {
+      "registered": true,
+      "consumed": true,
+      "testOnly": false,
+      "mountain": "not-implemented",
+      "refs": [
+        {
+          "file": "src/vs/code/electron-main/app.ts",
+          "kind": "server:register",
+          "side": "electron-main",
+          "test": false
+        },
+        {
+          "file": "src/vs/sessions/electron-browser/sessions.main.ts",
+          "kind": "client:get",
+          "side": "renderer",
+          "test": false
+        },
+        {
+          "file": "src/vs/workbench/electron-browser/desktop.main.ts",
+          "kind": "client:get",
+          "side": "renderer",
+          "test": false
+        }
+      ]
+    },
+    "IUserDataSyncResourceProviderService": {
+      "registered": true,
+      "consumed": false,
+      "testOnly": false,
+      "mountain": "not-implemented",
+      "refs": [
+        {
+          "file": "src/vs/code/electron-utility/sharedProcess/sharedProcessMain.ts",
+          "kind": "server:register",
+          "side": "shared-process",
+          "test": false
+        }
+      ]
+    },
+    "keyboardLayout": {
+      "registered": true,
+      "consumed": true,
+      "testOnly": false,
+      "mountain": "implemented(*)",
+      "refs": [
+        {
+          "file": "src/vs/code/electron-main/app.ts",
+          "kind": "server:register",
+          "side": "electron-main",
+          "test": false
+        },
+        {
+          "file": "src/vs/workbench/services/keybinding/electron-browser/nativeKeyboardLayoutService.ts",
+          "kind": "client:get",
+          "side": "renderer",
+          "test": false
+        }
+      ],
+      "proxyService": {
+        "methods": [
+          "getKeyboardLayoutData"
+        ],
+        "events": [
+          "onDidChangeKeyboardLayout"
+        ],
+        "note": "keyboard layout"
+      }
+    },
+    "languagePacks": {
+      "registered": true,
+      "consumed": false,
+      "testOnly": false,
+      "mountain": "not-implemented",
+      "refs": [
+        {
+          "file": "src/vs/code/electron-utility/sharedProcess/sharedProcessMain.ts",
+          "kind": "server:register",
+          "side": "shared-process",
+          "test": false
+        }
+      ]
+    },
+    "launch": {
+      "registered": true,
+      "consumed": true,
+      "testOnly": false,
+      "mountain": "implemented(3 commands)",
+      "refs": [
+        {
+          "file": "src/vs/code/electron-main/app.ts",
+          "kind": "server:register",
+          "side": "electron-main",
+          "test": false
+        },
+        {
+          "file": "src/vs/code/electron-main/main.ts",
+          "kind": "client:get",
+          "side": "electron-main",
+          "test": false
+        }
+      ]
+    },
+    "localFilesystem": {
+      "registered": true,
+      "consumed": true,
+      "testOnly": false,
+      "mountain": "implemented(*)",
+      "refs": [
+        {
+          "file": "src/vs/code/electron-main/app.ts",
+          "kind": "server:register",
+          "side": "electron-main",
+          "test": false,
+          "constant": "LOCAL_FILE_SYSTEM_CHANNEL_NAME"
+        },
+        {
+          "file": "src/vs/code/electron-main/app.ts",
+          "kind": "server:register",
+          "side": "electron-main",
+          "test": false,
+          "constant": "LOCAL_FILE_SYSTEM_CHANNEL_NAME"
+        },
+        {
+          "file": "src/vs/code/electron-utility/sharedProcess/sharedProcessMain.ts",
+          "kind": "client:get",
+          "side": "shared-process",
+          "test": false,
+          "constant": "LOCAL_FILE_SYSTEM_CHANNEL_NAME"
+        },
+        {
+          "file": "src/vs/workbench/services/files/electron-browser/diskFileSystemProvider.ts",
+          "kind": "client:get",
+          "side": "renderer",
+          "test": false,
+          "constant": "LOCAL_FILE_SYSTEM_CHANNEL_NAME"
+        }
+      ]
+    },
+    "localGit": {
+      "registered": true,
+      "consumed": false,
+      "testOnly": false,
+      "mountain": "not-implemented",
+      "refs": [
+        {
+          "file": "src/vs/code/electron-utility/sharedProcess/sharedProcessMain.ts",
+          "kind": "server:register",
+          "side": "shared-process",
+          "test": false
+        }
+      ]
+    },
+    "logger": {
+      "registered": true,
+      "consumed": true,
+      "testOnly": false,
+      "mountain": "implemented(*)",
+      "refs": [
+        {
+          "file": "src/vs/code/electron-main/app.ts",
+          "kind": "server:register",
+          "side": "electron-main",
+          "test": false
+        },
+        {
+          "file": "src/vs/code/electron-main/app.ts",
+          "kind": "server:register",
+          "side": "electron-main",
+          "test": false
+        },
+        {
+          "file": "src/vs/code/electron-utility/sharedProcess/sharedProcessMain.ts",
+          "kind": "client:get",
+          "side": "shared-process",
+          "test": false
+        },
+        {
+          "file": "src/vs/server/node/serverServices.ts",
+          "kind": "server:register",
+          "side": "node-main",
+          "test": false
+        },
+        {
+          "file": "src/vs/sessions/electron-browser/sessions.main.ts",
+          "kind": "client:get",
+          "side": "renderer",
+          "test": false
+        },
+        {
+          "file": "src/vs/workbench/electron-browser/desktop.main.ts",
+          "kind": "client:get",
+          "side": "renderer",
+          "test": false
+        }
+      ],
+      "serverCommands": [
+        "onDidChangeLoggers",
+        "onDidChangeVisibility",
+        "onDidChangeLogLevel",
+        "setLogLevel",
+        "getRegisteredLoggers"
+      ]
+    },
+    "mcpGalleryManifest": {
+      "registered": true,
+      "consumed": true,
+      "testOnly": false,
+      "mountain": "not-implemented",
+      "refs": [
+        {
+          "file": "src/vs/platform/mcp/common/mcpGalleryManifestServiceIpc.ts",
+          "kind": "server:register",
+          "side": "common",
+          "test": false
+        },
+        {
+          "file": "src/vs/workbench/services/mcp/browser/mcpGalleryManifestService.ts",
+          "kind": "client:get",
+          "side": "renderer",
+          "test": false
+        },
+        {
+          "file": "src/vs/workbench/services/mcp/electron-browser/mcpGalleryManifestService.ts",
+          "kind": "client:get",
+          "side": "renderer",
+          "test": false
+        }
+      ]
+    },
+    "mcpManagement": {
+      "registered": true,
+      "consumed": true,
+      "testOnly": false,
+      "mountain": "not-implemented",
+      "refs": [
+        {
+          "file": "src/vs/code/electron-utility/sharedProcess/sharedProcessMain.ts",
+          "kind": "server:register",
+          "side": "shared-process",
+          "test": false
+        },
+        {
+          "file": "src/vs/server/node/serverServices.ts",
+          "kind": "server:register",
+          "side": "node-main",
+          "test": false
+        },
+        {
+          "file": "src/vs/workbench/services/mcp/electron-browser/mcpWorkbenchManagementService.ts",
+          "kind": "client:get",
+          "side": "renderer",
+          "test": false
+        }
+      ]
+    },
+    "menubar": {
+      "registered": true,
+      "consumed": false,
+      "testOnly": false,
+      "mountain": "not-implemented",
+      "refs": [
+        {
+          "file": "src/vs/code/electron-main/app.ts",
+          "kind": "server:register",
+          "side": "electron-main",
+          "test": false
+        }
+      ],
+      "proxyService": {
+        "methods": [],
+        "events": [],
+        "note": "native menu bar"
+      }
+    },
+    "meteredConnection": {
+      "registered": true,
+      "consumed": true,
+      "testOnly": false,
+      "mountain": "not-implemented",
+      "refs": [
+        {
+          "file": "src/vs/code/electron-main/app.ts",
+          "kind": "server:register",
+          "side": "electron-main",
+          "test": false,
+          "constant": "METERED_CONNECTION_CHANNEL"
+        },
+        {
+          "file": "src/vs/code/electron-main/app.ts",
+          "kind": "server:register",
+          "side": "electron-main",
+          "test": false,
+          "constant": "METERED_CONNECTION_CHANNEL"
+        },
+        {
+          "file": "src/vs/code/electron-utility/sharedProcess/sharedProcessMain.ts",
+          "kind": "client:get",
+          "side": "shared-process",
+          "test": false,
+          "constant": "METERED_CONNECTION_CHANNEL"
+        },
+        {
+          "file": "src/vs/platform/meteredConnection/electron-browser/meteredConnectionService.ts",
+          "kind": "client:get",
+          "side": "renderer",
+          "test": false,
+          "constant": "METERED_CONNECTION_CHANNEL"
+        }
+      ]
+    },
+    "nativeHost": {
+      "registered": true,
+      "consumed": true,
+      "testOnly": false,
+      "mountain": "implemented(*)",
+      "refs": [
+        {
+          "file": "src/vs/code/electron-main/app.ts",
+          "kind": "server:register",
+          "side": "electron-main",
+          "test": false
+        },
+        {
+          "file": "src/vs/code/electron-main/app.ts",
+          "kind": "server:register",
+          "side": "electron-main",
+          "test": false
+        },
+        {
+          "file": "src/vs/platform/native/common/nativeHostService.ts",
+          "kind": "client:get",
+          "side": "common",
+          "test": false
+        }
+      ],
+      "proxyService": {
+        "methods": [
+          "getWindows",
+          "getWindowCount",
+          "getActiveWindowId",
+          "getActiveWindowPosition",
+          "getNativeWindowHandle",
+          "openWindow",
+          "openAgentsWindow",
+          "syncSystemWideKeybindings",
+          "isFullScreen",
+          "toggleFullScreen",
+          "getCursorScreenPoint",
+          "isMaximized",
+          "maximizeWindow",
+          "unmaximizeWindow",
+          "minimizeWindow",
+          "moveWindowTop",
+          "positionWindow",
+          "isWindowAlwaysOnTop",
+          "toggleWindowAlwaysOnTop",
+          "setWindowAlwaysOnTop",
+          "updateWindowControls",
+          "updateWindowAccentColor",
+          "setMinimumSize",
+          "saveWindowSplash",
+          "setBackgroundThrottling",
+          "focusWindow",
+          "showMessageBox",
+          "showSaveDialog",
+          "showOpenDialog",
+          "pickFileFolderAndOpen",
+          "pickFileAndOpen",
+          "pickFolderAndOpen",
+          "pickWorkspaceAndOpen",
+          "showItemInFolder",
+          "setRepresentedFilename",
+          "setDocumentEdited",
+          "setApplicationBadge",
+          "openExternal",
+          "moveItemToTrash",
+          "getMediaAccessStatus",
+          "isAdmin",
+          "writeElevated",
+          "isRunningUnderARM64Translation",
+          "getOSProperties",
+          "getOSStatistics",
+          "getOSVirtualMachineHint",
+          "getOSColorScheme",
+          "hasWSLFeatureInstalled",
+          "getScreenshot",
+          "uploadFileViaMobileApi",
+          "getProcessId",
+          "killProcess",
+          "triggerPaste",
+          "readClipboardText",
+          "writeClipboardText",
+          "readClipboardFindText",
+          "writeClipboardFindText",
+          "writeClipboardBuffer",
+          "readClipboardBuffer",
+          "hasClipboard",
+          "readImage",
+          "newWindowTab",
+          "showPreviousWindowTab",
+          "showNextWindowTab",
+          "moveWindowTabToNewWindow",
+          "mergeAllWindowTabs",
+          "toggleWindowTabsBar",
+          "updateTouchBar",
+          "installShellCommand",
+          "uninstallShellCommand",
+          "notifyReady",
+          "relaunch",
+          "reload",
+          "closeWindow",
+          "quit",
+          "exit",
+          "openDevTools",
+          "toggleDevTools",
+          "openGPUInfoWindow",
+          "openDevToolsWindow",
+          "openContentTracingWindow",
+          "stopTracing",
+          "profileRenderer",
+          "startTracing",
+          "resolveProxy",
+          "resolveProxyWithPackage",
+          "readProxyConfigWithPackage",
+          "lookupAuthorization",
+          "lookupKerberosAuthorization",
+          "loadCertificates",
+          "isPortFree",
+          "findFreePort",
+          "windowsGetStringRegKey",
+          "showToast",
+          "clearToast",
+          "clearToasts",
+          "createZipFile",
+          "getSystemIdleState",
+          "getSystemIdleTime",
+          "getCurrentThermalState",
+          "isOnBatteryPower",
+          "startPowerSaveBlocker",
+          "stopPowerSaveBlocker",
+          "isPowerSaveBlockerStarted"
+        ],
+        "events": [
+          "onDidOpenMainWindow",
+          "onDidMaximizeWindow",
+          "onDidUnmaximizeWindow",
+          "onDidFocusMainWindow",
+          "onDidBlurMainWindow",
+          "onDidChangeWindowFullScreen",
+          "onDidChangeWindowAlwaysOnTop",
+          "onDidFocusMainOrAuxiliaryWindow",
+          "onDidBlurMainOrAuxiliaryWindow",
+          "onDidChangeDisplay",
+          "onDidSuspendOS",
+          "onDidResumeOS",
+          "onDidChangeOnBatteryPower",
+          "onDidChangeThermalState",
+          "onDidChangeSpeedLimit",
+          "onWillShutdownOS",
+          "onDidLockScreen",
+          "onDidUnlockScreen",
+          "onDidChangeColorScheme",
+          "onDidChangePassword",
+          "onDidTriggerWindowSystemContextMenu"
+        ],
+        "note": "window/dialog/clipboard/process surface"
+      }
+    },
+    "nativeManagedSettings": {
+      "registered": true,
+      "consumed": true,
+      "testOnly": false,
+      "mountain": "not-implemented",
+      "refs": [
+        {
+          "file": "src/vs/code/electron-main/app.ts",
+          "kind": "server:register",
+          "side": "electron-main",
+          "test": false
+        },
+        {
+          "file": "src/vs/sessions/electron-browser/sessions.main.ts",
+          "kind": "client:get",
+          "side": "renderer",
+          "test": false
+        },
+        {
+          "file": "src/vs/workbench/electron-browser/desktop.main.ts",
+          "kind": "client:get",
+          "side": "renderer",
+          "test": false
+        }
+      ]
+    },
+    "playwright": {
+      "registered": true,
+      "consumed": false,
+      "testOnly": false,
+      "mountain": "not-implemented",
+      "refs": [
+        {
+          "file": "src/vs/code/electron-utility/sharedProcess/sharedProcessMain.ts",
+          "kind": "server:register",
+          "side": "shared-process",
+          "test": false
+        }
+      ]
+    },
+    "policy": {
+      "registered": true,
+      "consumed": true,
+      "testOnly": false,
+      "mountain": "not-implemented",
+      "refs": [
+        {
+          "file": "src/vs/code/electron-main/app.ts",
+          "kind": "server:register",
+          "side": "electron-main",
+          "test": false
+        },
+        {
+          "file": "src/vs/code/electron-main/app.ts",
+          "kind": "server:register",
+          "side": "electron-main",
+          "test": false
+        },
+        {
+          "file": "src/vs/code/electron-utility/sharedProcess/sharedProcessMain.ts",
+          "kind": "client:get",
+          "side": "shared-process",
+          "test": false
+        },
+        {
+          "file": "src/vs/sessions/electron-browser/sessions.main.ts",
+          "kind": "client:get",
+          "side": "renderer",
+          "test": false
+        },
+        {
+          "file": "src/vs/workbench/electron-browser/desktop.main.ts",
+          "kind": "client:get",
+          "side": "renderer",
+          "test": false
+        }
+      ],
+      "serverCommands": [
+        "onDidChange",
+        "updatePolicyDefinitions"
+      ]
+    },
+    "process": {
+      "registered": true,
+      "consumed": false,
+      "testOnly": false,
+      "mountain": "not-implemented",
+      "refs": [
+        {
+          "file": "src/vs/code/electron-main/app.ts",
+          "kind": "server:register",
+          "side": "electron-main",
+          "test": false
+        }
+      ],
+      "proxyService": {
+        "methods": [
+          "resolveProcesses",
+          "getSystemStatus",
+          "getSystemInfo",
+          "getPerformanceInfo"
+        ],
+        "events": [],
+        "note": "process info"
+      }
+    },
+    "profileStorageListener": {
+      "registered": true,
+      "consumed": true,
+      "testOnly": false,
+      "mountain": "not-implemented",
+      "refs": [
+        {
+          "file": "src/vs/code/electron-main/app.ts",
+          "kind": "server:register",
+          "side": "electron-main",
+          "test": false
+        },
+        {
+          "file": "src/vs/platform/userDataProfile/common/userDataProfileStorageService.ts",
+          "kind": "client:get",
+          "side": "common",
+          "test": false
+        }
+      ]
+    },
+    "remoteextensionsenvironment": {
+      "registered": true,
+      "consumed": false,
+      "testOnly": false,
+      "mountain": "not-implemented",
+      "refs": [
+        {
+          "file": "src/vs/server/node/serverServices.ts",
+          "kind": "server:register",
+          "side": "node-main",
+          "test": false
+        }
+      ]
+    },
+    "remoteTunnel": {
+      "registered": true,
+      "consumed": false,
+      "testOnly": false,
+      "mountain": "not-implemented",
+      "refs": [
+        {
+          "file": "src/vs/code/electron-utility/sharedProcess/sharedProcessMain.ts",
+          "kind": "server:register",
+          "side": "shared-process",
+          "test": false
+        }
+      ]
+    },
+    "request": {
+      "registered": true,
+      "consumed": false,
+      "testOnly": false,
+      "mountain": "not-implemented",
+      "refs": [
+        {
+          "file": "src/vs/server/node/serverServices.ts",
+          "kind": "server:register",
+          "side": "node-main",
+          "test": false
+        }
+      ]
+    },
+    "sandboxHelper": {
+      "registered": true,
+      "consumed": false,
+      "testOnly": false,
+      "mountain": "not-implemented",
+      "refs": [
+        {
+          "file": "src/vs/code/electron-main/app.ts",
+          "kind": "server:register",
+          "side": "electron-main",
+          "test": false
+        }
+      ]
+    },
+    "sharedWebContentExtractor": {
+      "registered": true,
+      "consumed": false,
+      "testOnly": false,
+      "mountain": "not-implemented",
+      "refs": [
+        {
+          "file": "src/vs/code/electron-utility/sharedProcess/sharedProcessMain.ts",
+          "kind": "server:register",
+          "side": "shared-process",
+          "test": false
+        }
+      ]
+    },
+    "sign": {
+      "registered": true,
+      "consumed": true,
+      "testOnly": false,
+      "mountain": "not-implemented",
+      "refs": [
+        {
+          "file": "src/vs/code/electron-main/app.ts",
+          "kind": "server:register",
+          "side": "electron-main",
+          "test": false
+        },
+        {
+          "file": "src/vs/sessions/electron-browser/sessions.main.ts",
+          "kind": "client:get",
+          "side": "renderer",
+          "test": false
+        },
+        {
+          "file": "src/vs/workbench/electron-browser/desktop.main.ts",
+          "kind": "client:get",
+          "side": "renderer",
+          "test": false
+        }
+      ],
+      "proxyService": {
+        "methods": [
+          "createNewMessage",
+          "validate",
+          "sign"
+        ],
+        "events": [],
+        "note": "signing"
+      }
+    },
+    "storage": {
+      "registered": true,
+      "consumed": true,
+      "testOnly": false,
+      "mountain": "implemented(*)",
+      "refs": [
+        {
+          "file": "src/vs/code/electron-main/app.ts",
+          "kind": "server:register",
+          "side": "electron-main",
+          "test": false
+        },
+        {
+          "file": "src/vs/code/electron-main/app.ts",
+          "kind": "server:register",
+          "side": "electron-main",
+          "test": false
+        },
+        {
+          "file": "src/vs/code/electron-utility/sharedProcess/contrib/storageDataCleaner.ts",
+          "kind": "client:get",
+          "side": "shared-process",
+          "test": false
+        },
+        {
+          "file": "src/vs/platform/storage/common/storageService.ts",
+          "kind": "client:get",
+          "side": "common",
+          "test": false
+        },
+        {
+          "file": "src/vs/platform/storage/common/storageService.ts",
+          "kind": "client:get",
+          "side": "common",
+          "test": false
+        },
+        {
+          "file": "src/vs/platform/storage/common/storageService.ts",
+          "kind": "client:get",
+          "side": "common",
+          "test": false
+        },
+        {
+          "file": "src/vs/platform/storage/common/storageService.ts",
+          "kind": "client:get",
+          "side": "common",
+          "test": false
+        },
+        {
+          "file": "src/vs/platform/userDataProfile/common/userDataProfileStorageService.ts",
+          "kind": "client:get",
+          "side": "common",
+          "test": false
+        },
+        {
+          "file": "src/vs/sessions/contrib/automations/electron-browser/automationStorageService.ts",
+          "kind": "client:get",
+          "side": "renderer",
+          "test": false
+        },
+        {
+          "file": "src/vs/workbench/services/storage/electron-browser/storageService.ts",
+          "kind": "client:get",
+          "side": "renderer",
+          "test": false
+        },
+        {
+          "file": "src/vs/workbench/services/storage/electron-browser/storageService.ts",
+          "kind": "client:get",
+          "side": "renderer",
+          "test": false
+        }
+      ],
+      "serverCommands": [
+        "onDidChangeStorage",
+        "getItems",
+        "getValue",
+        "getFallbackApplicationStorageItems",
+        "updateItems",
+        "compareAndSwap",
+        "optimize",
+        "isUsed"
+      ]
+    },
+    "telemetry": {
+      "registered": true,
+      "consumed": false,
+      "testOnly": false,
+      "mountain": "not-implemented",
+      "refs": [
+        {
+          "file": "src/vs/server/node/serverServices.ts",
+          "kind": "server:register",
+          "side": "node-main",
+          "test": false
+        }
+      ]
+    },
+    "telemetryAppender": {
+      "registered": true,
+      "consumed": true,
+      "testOnly": false,
+      "mountain": "not-implemented",
+      "refs": [
+        {
+          "file": "src/vs/code/electron-main/app.ts",
+          "kind": "client:get",
+          "side": "electron-main",
+          "test": false
+        },
+        {
+          "file": "src/vs/code/electron-utility/sharedProcess/sharedProcessMain.ts",
+          "kind": "server:register",
+          "side": "shared-process",
+          "test": false
+        },
+        {
+          "file": "src/vs/platform/telemetry/node/customEndpointTelemetryService.ts",
+          "kind": "client:get",
+          "side": "node-main",
+          "test": false
+        },
+        {
+          "file": "src/vs/workbench/contrib/debug/node/telemetryApp.ts",
+          "kind": "server:register",
+          "side": "node-main",
+          "test": false
+        },
+        {
+          "file": "src/vs/workbench/services/telemetry/electron-browser/telemetryService.ts",
+          "kind": "client:get",
+          "side": "renderer",
+          "test": false
+        }
+      ]
+    },
+    "test": {
+      "registered": false,
+      "consumed": false,
+      "testOnly": true,
+      "mountain": "not-implemented",
+      "refs": [
+        {
+          "file": "src/vs/base/parts/ipc/test/node/ipc.cp.integrationTest.ts",
+          "kind": "client:get",
+          "side": "node-main",
+          "test": true
+        },
+        {
+          "file": "src/vs/base/parts/ipc/test/node/ipc.cp.integrationTest.ts",
+          "kind": "client:get",
+          "side": "node-main",
+          "test": true
+        },
+        {
+          "file": "src/vs/base/parts/ipc/test/node/testApp.ts",
+          "kind": "server:register",
+          "side": "node-main",
+          "test": true
+        },
+        {
+          "file": "src/vs/base/parts/ipc/test/node/testApp.ts",
+          "kind": "client:get",
+          "side": "node-main",
+          "test": true
+        },
+        {
+          "file": "src/vs/base/parts/ipc/test/node/testApp.ts",
+          "kind": "client:get",
+          "side": "node-main",
+          "test": true
+        }
+      ]
+    },
+    "testchannel": {
+      "registered": false,
+      "consumed": false,
+      "testOnly": true,
+      "mountain": "not-implemented",
+      "refs": [
+        {
+          "file": "src/vs/base/parts/ipc/test/common/ipc.test.ts",
+          "kind": "client:get",
+          "side": "common",
+          "test": true
+        }
+      ]
+    },
+    "update": {
+      "registered": true,
+      "consumed": false,
+      "testOnly": false,
+      "mountain": "not-implemented",
+      "refs": [
+        {
+          "file": "src/vs/code/electron-main/app.ts",
+          "kind": "server:register",
+          "side": "electron-main",
+          "test": false
+        }
+      ],
+      "proxyService": {
+        "methods": [
+          "checkForUpdates",
+          "downloadUpdate",
+          "applyUpdate",
+          "quitAndInstall",
+          "isLatestVersion",
+          "_applySpecificUpdate",
+          "setInternalOrg"
+        ],
+        "events": [
+          "onStateChange"
+        ],
+        "note": "updates"
+      }
+    },
+    "url": {
+      "registered": true,
+      "consumed": true,
+      "testOnly": false,
+      "mountain": "not-implemented",
+      "refs": [
+        {
+          "file": "src/vs/code/electron-main/app.ts",
+          "kind": "server:register",
+          "side": "electron-main",
+          "test": false
+        },
+        {
+          "file": "src/vs/workbench/services/url/electron-browser/urlService.ts",
+          "kind": "client:get",
+          "side": "renderer",
+          "test": false
+        }
+      ],
+      "proxyService": {
+        "methods": [
+          "create",
+          "open",
+          "registerHandler"
+        ],
+        "events": [],
+        "note": "deep links"
+      }
+    },
+    "urlHandler": {
+      "registered": true,
+      "consumed": true,
+      "testOnly": false,
+      "mountain": "not-implemented",
+      "refs": [
+        {
+          "file": "src/vs/code/electron-main/app.ts",
+          "kind": "client:get",
+          "side": "electron-main",
+          "test": false
+        },
+        {
+          "file": "src/vs/workbench/services/url/electron-browser/urlService.ts",
+          "kind": "server:register",
+          "side": "renderer",
+          "test": false
+        }
+      ]
+    },
+    "userDataAutoSync": {
+      "registered": true,
+      "consumed": true,
+      "testOnly": false,
+      "mountain": "not-implemented",
+      "refs": [
+        {
+          "file": "src/vs/code/electron-utility/sharedProcess/sharedProcessMain.ts",
+          "kind": "server:register",
+          "side": "shared-process",
+          "test": false
+        },
+        {
+          "file": "src/vs/workbench/services/userDataSync/electron-browser/userDataAutoSyncService.ts",
+          "kind": "client:get",
+          "side": "renderer",
+          "test": false
+        }
+      ]
+    },
+    "userDataProfiles": {
+      "registered": true,
+      "consumed": true,
+      "testOnly": false,
+      "mountain": "implemented(*)",
+      "refs": [
+        {
+          "file": "src/vs/code/electron-main/app.ts",
+          "kind": "server:register",
+          "side": "electron-main",
+          "test": false
+        },
+        {
+          "file": "src/vs/code/electron-main/app.ts",
+          "kind": "server:register",
+          "side": "electron-main",
+          "test": false
+        },
+        {
+          "file": "src/vs/code/electron-utility/sharedProcess/sharedProcessMain.ts",
+          "kind": "client:get",
+          "side": "shared-process",
+          "test": false
+        },
+        {
+          "file": "src/vs/server/node/serverServices.ts",
+          "kind": "server:register",
+          "side": "node-main",
+          "test": false
+        },
+        {
+          "file": "src/vs/sessions/electron-browser/sessions.main.ts",
+          "kind": "client:get",
+          "side": "renderer",
+          "test": false
+        },
+        {
+          "file": "src/vs/workbench/electron-browser/desktop.main.ts",
+          "kind": "client:get",
+          "side": "renderer",
+          "test": false
+        },
+        {
+          "file": "src/vs/workbench/services/userDataProfile/common/remoteUserDataProfiles.ts",
+          "kind": "client:get",
+          "side": "common",
+          "test": false
+        }
+      ],
+      "proxyService": {
+        "methods": [
+          "createNamedProfile",
+          "createTransientProfile",
+          "createProfile",
+          "updateProfile",
+          "removeProfile",
+          "setProfileForWorkspace",
+          "resetWorkspaces",
+          "cleanUp",
+          "cleanUpTransientProfiles"
+        ],
+        "events": [
+          "onDidChangeProfiles",
+          "onDidResetWorkspaces"
+        ],
+        "note": "profile CRUD"
+      },
+      "serverCommands": [
+        "onDidChangeProfiles",
+        "createProfile",
+        "updateProfile",
+        "removeProfile"
+      ]
+    },
+    "userDataSync": {
+      "registered": true,
+      "consumed": false,
+      "testOnly": false,
+      "mountain": "not-implemented",
+      "refs": [
+        {
+          "file": "src/vs/code/electron-utility/sharedProcess/sharedProcessMain.ts",
+          "kind": "server:register",
+          "side": "shared-process",
+          "test": false
+        }
+      ]
+    },
+    "userDataSyncAccount": {
+      "registered": true,
+      "consumed": false,
+      "testOnly": false,
+      "mountain": "not-implemented",
+      "refs": [
+        {
+          "file": "src/vs/code/electron-utility/sharedProcess/sharedProcessMain.ts",
+          "kind": "server:register",
+          "side": "shared-process",
+          "test": false
+        }
+      ]
+    },
+    "userDataSyncMachines": {
+      "registered": true,
+      "consumed": false,
+      "testOnly": false,
+      "mountain": "not-implemented",
+      "refs": [
+        {
+          "file": "src/vs/code/electron-utility/sharedProcess/sharedProcessMain.ts",
+          "kind": "server:register",
+          "side": "shared-process",
+          "test": false
+        }
+      ]
+    },
+    "userDataSyncStoreManagement": {
+      "registered": true,
+      "consumed": false,
+      "testOnly": false,
+      "mountain": "not-implemented",
+      "refs": [
+        {
+          "file": "src/vs/code/electron-utility/sharedProcess/sharedProcessMain.ts",
+          "kind": "server:register",
+          "side": "shared-process",
+          "test": false
+        }
+      ]
+    },
+    "userDataSyncUtil": {
+      "registered": true,
+      "consumed": true,
+      "testOnly": false,
+      "mountain": "not-implemented",
+      "refs": [
+        {
+          "file": "src/vs/code/electron-utility/sharedProcess/sharedProcessMain.ts",
+          "kind": "client:get",
+          "side": "shared-process",
+          "test": false
+        },
+        {
+          "file": "src/vs/workbench/contrib/userDataSync/electron-browser/userDataSyncUtilChannel.contribution.ts",
+          "kind": "server:register",
+          "side": "renderer",
+          "test": false
+        }
+      ]
+    },
+    "v8InspectProfiling": {
+      "registered": true,
+      "consumed": false,
+      "testOnly": false,
+      "mountain": "not-implemented",
+      "refs": [
+        {
+          "file": "src/vs/code/electron-utility/sharedProcess/sharedProcessMain.ts",
+          "kind": "server:register",
+          "side": "shared-process",
+          "test": false
+        }
+      ]
+    },
+    "watcher": {
+      "registered": true,
+      "consumed": true,
+      "testOnly": false,
+      "mountain": "not-implemented",
+      "refs": [
+        {
+          "file": "src/vs/platform/files/node/watcher/watcherClient.ts",
+          "kind": "client:get",
+          "side": "node-main",
+          "test": false
+        },
+        {
+          "file": "src/vs/platform/files/node/watcher/watcherMain.ts",
+          "kind": "server:register",
+          "side": "node-main",
+          "test": false
+        },
+        {
+          "file": "src/vs/workbench/services/files/electron-browser/watcherClient.ts",
+          "kind": "client:get",
+          "side": "renderer",
+          "test": false
+        }
+      ]
+    },
+    "webContentExtractor": {
+      "registered": true,
+      "consumed": false,
+      "testOnly": false,
+      "mountain": "not-implemented",
+      "refs": [
+        {
+          "file": "src/vs/code/electron-main/app.ts",
+          "kind": "server:register",
+          "side": "electron-main",
+          "test": false
+        }
+      ]
+    },
+    "webview": {
+      "registered": true,
+      "consumed": true,
+      "testOnly": false,
+      "mountain": "not-implemented",
+      "refs": [
+        {
+          "file": "src/vs/code/electron-main/app.ts",
+          "kind": "server:register",
+          "side": "electron-main",
+          "test": false
+        },
+        {
+          "file": "src/vs/workbench/contrib/webview/electron-browser/webviewElement.ts",
+          "kind": "client:get",
+          "side": "renderer",
+          "test": false
+        },
+        {
+          "file": "src/vs/workbench/contrib/webview/electron-browser/windowIgnoreMenuShortcutsManager.ts",
+          "kind": "client:get",
+          "side": "renderer",
+          "test": false
+        }
+      ],
+      "proxyService": {
+        "methods": [
+          "setIgnoreMenuShortcuts",
+          "findInFrame",
+          "stopFindInFrame"
+        ],
+        "events": [
+          "onFoundInFrame"
+        ],
+        "note": "webview lifecycle"
+      }
+    },
+    "workspaces": {
+      "registered": true,
+      "consumed": true,
+      "testOnly": false,
+      "mountain": "not-implemented",
+      "refs": [
+        {
+          "file": "src/vs/code/electron-main/app.ts",
+          "kind": "server:register",
+          "side": "electron-main",
+          "test": false
+        },
+        {
+          "file": "src/vs/workbench/services/workspaces/electron-browser/workspacesService.ts",
+          "kind": "client:get",
+          "side": "renderer",
+          "test": false
+        }
+      ],
+      "proxyService": {
+        "methods": [
+          "enterWorkspace",
+          "createUntitledWorkspace",
+          "deleteUntitledWorkspace",
+          "getWorkspaceIdentifier",
+          "addRecentlyOpened",
+          "removeRecentlyOpened",
+          "clearRecentlyOpened",
+          "getRecentlyOpened",
+          "getDirtyWorkspaces"
+        ],
+        "events": [
+          "onDidChangeRecentlyOpened"
+        ],
+        "note": "workspace dialogs"
+      }
+    }
+  },
+  "mountainCoverage": {
+    "channels": [
+      "keyboardLayout",
+      "launch",
+      "localFilesystem",
+      "logger",
+      "nativeHost",
+      "storage",
+      "userDataProfiles"
+    ],
+    "note": "Parsed from match arms in src-tauri/src/*.rs; \"*\" = whole-channel handler."
+  },
+  "dynamicCalls": [
+    {
+      "file": "src/vs/base/parts/contextmenu/electron-browser/contextmenu.ts",
+      "kind": "renderer:once"
+    },
+    {
+      "file": "src/vs/base/parts/contextmenu/electron-browser/contextmenu.ts",
+      "kind": "renderer:removeListener"
+    },
+    {
+      "file": "src/vs/base/parts/contextmenu/electron-browser/contextmenu.ts",
+      "kind": "renderer:send"
+    },
+    {
+      "file": "src/vs/base/parts/contextmenu/electron-main/contextmenu.ts",
+      "kind": "main:on"
+    },
+    {
+      "file": "src/vs/base/parts/ipc/common/ipc.ts",
+      "kind": "server:register"
+    },
+    {
+      "file": "src/vs/base/parts/ipc/common/ipc.ts",
+      "kind": "client:get"
+    },
+    {
+      "file": "src/vs/base/parts/ipc/electron-browser/ipc.mp.ts",
+      "kind": "renderer:send"
+    },
+    {
+      "file": "src/vs/base/parts/ipc/electron-main/ipcMain.ts",
+      "kind": "renderer:invoke"
+    },
+    {
+      "file": "src/vs/base/parts/ipc/node/ipc.cp.ts",
+      "kind": "client:get"
+    },
+    {
+      "file": "src/vs/base/parts/ipc/test/common/ipc.test.ts",
+      "kind": "server:register"
+    },
+    {
+      "file": "src/vs/base/parts/ipc/test/common/ipc.test.ts",
+      "kind": "client:get"
+    },
+    {
+      "file": "src/vs/base/parts/sandbox/electron-browser/preload-aux.ts",
+      "kind": "renderer:send"
+    },
+    {
+      "file": "src/vs/base/parts/sandbox/electron-browser/preload-aux.ts",
+      "kind": "renderer:invoke"
+    },
+    {
+      "file": "src/vs/base/parts/sandbox/electron-browser/preload.ts",
+      "kind": "renderer:invoke"
+    },
+    {
+      "file": "src/vs/base/parts/sandbox/electron-browser/preload.ts",
+      "kind": "renderer:send"
+    },
+    {
+      "file": "src/vs/base/parts/sandbox/electron-browser/preload.ts",
+      "kind": "renderer:on"
+    },
+    {
+      "file": "src/vs/base/parts/sandbox/electron-browser/preload.ts",
+      "kind": "renderer:once"
+    },
+    {
+      "file": "src/vs/base/parts/sandbox/electron-browser/preload.ts",
+      "kind": "renderer:removeListener"
+    },
+    {
+      "file": "src/vs/code/electron-main/app.ts",
+      "kind": "server:register"
+    },
+    {
+      "file": "src/vs/code/electron-main/app.ts",
+      "kind": "client:get"
+    },
+    {
+      "file": "src/vs/code/electron-utility/sharedProcess/sharedProcessMain.ts",
+      "kind": "server:register"
+    },
+    {
+      "file": "src/vs/editor/common/services/editorWorkerHost.ts",
+      "kind": "client:get"
+    },
+    {
+      "file": "src/vs/editor/editor.worker.start.ts",
+      "kind": "client:get"
+    },
+    {
+      "file": "src/vs/platform/agentHost/common/agentHostClientByokLmChannel.ts",
+      "kind": "client:get"
+    },
+    {
+      "file": "src/vs/platform/agentHost/common/agentHostClientProxyChannel.ts",
+      "kind": "client:get"
+    },
+    {
+      "file": "src/vs/platform/agentHost/electron-browser/localAgentHostService.ts",
+      "kind": "renderer:on"
+    },
+    {
+      "file": "src/vs/platform/agentHost/electron-browser/localAgentHostService.ts",
+      "kind": "renderer:removeListener"
+    },
+    {
+      "file": "src/vs/platform/agentHost/electron-browser/localAgentHostService.ts",
+      "kind": "renderer:send"
+    },
+    {
+      "file": "src/vs/platform/agentHost/electron-browser/localAgentHostService.ts",
+      "kind": "server:register"
+    },
+    {
+      "file": "src/vs/platform/agentHost/electron-browser/localAgentHostService.ts",
+      "kind": "client:get"
+    },
+    {
+      "file": "src/vs/platform/agentHost/electron-browser/sshRemoteAgentHostServiceImpl.ts",
+      "kind": "client:get"
+    },
+    {
+      "file": "src/vs/platform/agentHost/electron-browser/wslRemoteAgentHostServiceImpl.ts",
+      "kind": "client:get"
+    },
+    {
+      "file": "src/vs/platform/agentHost/electron-main/electronAgentHostStarter.ts",
+      "kind": "main:on"
+    },
+    {
+      "file": "src/vs/platform/agentHost/electron-main/electronAgentHostStarter.ts",
+      "kind": "main:removeListener"
+    },
+    {
+      "file": "src/vs/platform/agentHost/electron-main/electronAgentHostStarter.ts",
+      "kind": "client:get"
+    },
+    {
+      "file": "src/vs/platform/agentHost/node/agentHostMain.ts",
+      "kind": "server:register"
+    },
+    {
+      "file": "src/vs/platform/agentHost/node/agentHostMain.ts",
+      "kind": "client:get"
+    },
+    {
+      "file": "src/vs/platform/agentHost/node/agentHostService.ts",
+      "kind": "client:get"
+    },
+    {
+      "file": "src/vs/platform/agentHost/node/nodeAgentHostStarter.ts",
+      "kind": "client:get"
+    },
+    {
+      "file": "src/vs/platform/diagnostics/electron-main/diagnosticsMainService.ts",
+      "kind": "main:once"
+    },
+    {
+      "file": "src/vs/platform/ipc/common/mainProcessService.ts",
+      "kind": "server:register"
+    },
+    {
+      "file": "src/vs/platform/ipc/common/mainProcessService.ts",
+      "kind": "client:get"
+    },
+    {
+      "file": "src/vs/platform/ipc/common/services.ts",
+      "kind": "server:register"
+    },
+    {
+      "file": "src/vs/platform/ipc/common/services.ts",
+      "kind": "client:get"
+    },
+    {
+      "file": "src/vs/platform/ipc/electron-browser/mainProcessService.ts",
+      "kind": "server:register"
+    },
+    {
+      "file": "src/vs/platform/ipc/electron-browser/mainProcessService.ts",
+      "kind": "client:get"
+    },
+    {
+      "file": "src/vs/platform/ipc/electron-browser/services.ts",
+      "kind": "client:get"
+    },
+    {
+      "file": "src/vs/platform/lifecycle/electron-main/lifecycleMainService.ts",
+      "kind": "main:removeListener"
+    },
+    {
+      "file": "src/vs/platform/lifecycle/electron-main/lifecycleMainService.ts",
+      "kind": "main:on"
+    },
+    {
+      "file": "src/vs/platform/lifecycle/electron-main/lifecycleMainService.ts",
+      "kind": "main:once"
+    },
+    {
+      "file": "src/vs/platform/localTranscription/node/localTranscriptionMain.ts",
+      "kind": "server:register"
+    },
+    {
+      "file": "src/vs/platform/mcp/node/mcpGatewayChannel.ts",
+      "kind": "client:get"
+    },
+    {
+      "file": "src/vs/platform/meteredConnection/test/electron-browser/meteredConnectionService.test.ts",
+      "kind": "client:get"
+    },
+    {
+      "file": "src/vs/platform/protocol/electron-main/protocol.ts",
+      "kind": "renderer:invoke"
+    },
+    {
+      "file": "src/vs/platform/protocol/electron-main/protocolMainService.ts",
+      "kind": "main:handle"
+    },
+    {
+      "file": "src/vs/platform/protocol/electron-main/protocolMainService.ts",
+      "kind": "main:removeHandler"
+    },
+    {
+      "file": "src/vs/platform/remote/electron-browser/electronRemoteResourceLoader.ts",
+      "kind": "server:register"
+    },
+    {
+      "file": "src/vs/platform/remote/test/electron-browser/electronRemoteResourceLoader.test.ts",
+      "kind": "server:register"
+    },
+    {
+      "file": "src/vs/platform/sharedProcess/electron-main/sharedProcess.ts",
+      "kind": "main:on"
+    },
+    {
+      "file": "src/vs/platform/terminal/node/ptyHostMain.ts",
+      "kind": "server:register"
+    },
+    {
+      "file": "src/vs/platform/terminal/node/ptyHostService.ts",
+      "kind": "client:get"
+    },
+    {
+      "file": "src/vs/platform/windows/electron-main/windowImpl.ts",
+      "kind": "main:push"
+    },
+    {
+      "file": "src/vs/server/node/serverAgentHostManager.ts",
+      "kind": "client:get"
+    },
+    {
+      "file": "src/vs/server/node/serverServices.ts",
+      "kind": "server:register"
+    },
+    {
+      "file": "src/vs/sessions/contrib/providers/remoteAgentHost/browser/remoteAgentHostLogForwarder.ts",
+      "kind": "server:register"
+    },
+    {
+      "file": "src/vs/sessions/contrib/providers/remoteAgentHost/browser/remoteAgentHostLogForwarder.ts",
+      "kind": "client:get"
+    },
+    {
+      "file": "src/vs/sessions/contrib/providers/remoteAgentHost/electron-browser/devContainerAgentHostConnector.contribution.ts",
+      "kind": "server:register"
+    },
+    {
+      "file": "src/vs/sessions/contrib/providers/remoteAgentHost/electron-browser/devContainerAgentHostConnector.contribution.ts",
+      "kind": "client:get"
+    },
+    {
+      "file": "src/vs/sessions/contrib/providers/remoteAgentHost/electron-browser/tunnelAgentHostServiceImpl.ts",
+      "kind": "client:get"
+    },
+    {
+      "file": "src/vs/workbench/api/browser/mainThreadOutputService.ts",
+      "kind": "server:register"
+    },
+    {
+      "file": "src/vs/workbench/api/browser/mainThreadOutputService.ts",
+      "kind": "client:get"
+    },
+    {
+      "file": "src/vs/workbench/contrib/chat/browser/agentSessions/agentSessionsModel.ts",
+      "kind": "server:register"
+    },
+    {
+      "file": "src/vs/workbench/contrib/chat/browser/agentSessions/agentSessionsModel.ts",
+      "kind": "client:get"
+    },
+    {
+      "file": "src/vs/workbench/contrib/chat/browser/chatDebug/agentHostLogSources.ts",
+      "kind": "client:get"
+    },
+    {
+      "file": "src/vs/workbench/contrib/debug/browser/extensionHostDebugService.ts",
+      "kind": "client:get"
+    },
+    {
+      "file": "src/vs/workbench/contrib/logs/common/logs.contribution.ts",
+      "kind": "server:register"
+    },
+    {
+      "file": "src/vs/workbench/contrib/logs/common/logs.contribution.ts",
+      "kind": "client:get"
+    },
+    {
+      "file": "src/vs/workbench/contrib/mcp/browser/mcpGatewayToolBrokerContribution.ts",
+      "kind": "server:register"
+    },
+    {
+      "file": "src/vs/workbench/contrib/mcp/electron-browser/mcpGatewayService.ts",
+      "kind": "client:get"
+    },
+    {
+      "file": "src/vs/workbench/contrib/mcp/electron-browser/mcpGatewayToolBrokerContribution.ts",
+      "kind": "server:register"
+    },
+    {
+      "file": "src/vs/workbench/contrib/mcp/electron-browser/nativeMpcDiscovery.ts",
+      "kind": "client:get"
+    },
+    {
+      "file": "src/vs/workbench/contrib/output/browser/output.contribution.ts",
+      "kind": "server:register"
+    },
+    {
+      "file": "src/vs/workbench/contrib/output/browser/output.contribution.ts",
+      "kind": "client:get"
+    },
+    {
+      "file": "src/vs/workbench/contrib/output/browser/outputServices.ts",
+      "kind": "server:register"
+    },
+    {
+      "file": "src/vs/workbench/contrib/output/browser/outputServices.ts",
+      "kind": "client:get"
+    },
+    {
+      "file": "src/vs/workbench/contrib/remote/electron-browser/remote.contribution.ts",
+      "kind": "renderer:send"
+    },
+    {
+      "file": "src/vs/workbench/contrib/tasks/browser/abstractTaskService.ts",
+      "kind": "client:get"
+    },
+    {
+      "file": "src/vs/workbench/contrib/tasks/browser/task.contribution.ts",
+      "kind": "server:register"
+    },
+    {
+      "file": "src/vs/workbench/contrib/tasks/browser/terminalTaskSystem.ts",
+      "kind": "client:get"
+    },
+    {
+      "file": "src/vs/workbench/contrib/terminal/browser/remoteTerminalBackend.ts",
+      "kind": "client:get"
+    },
+    {
+      "file": "src/vs/workbench/contrib/terminal/electron-browser/localTerminalBackend.ts",
+      "kind": "client:get"
+    },
+    {
+      "file": "src/vs/workbench/contrib/userDataSync/test/electron-browser/userDataSyncUtilChannel.test.ts",
+      "kind": "server:register"
+    },
+    {
+      "file": "src/vs/workbench/electron-browser/window.ts",
+      "kind": "renderer:send"
+    },
+    {
+      "file": "src/vs/workbench/services/agentHost/browser/editorRemoteAgentHostServiceClient.ts",
+      "kind": "client:get"
+    },
+    {
+      "file": "src/vs/workbench/services/extensionManagement/test/electron-browser/extensionGalleryManifestService.test.ts",
+      "kind": "client:get"
+    },
+    {
+      "file": "src/vs/workbench/services/languageDetection/browser/languageDetectionWebWorker.ts",
+      "kind": "client:get"
+    },
+    {
+      "file": "src/vs/workbench/services/languageDetection/browser/languageDetectionWorker.protocol.ts",
+      "kind": "client:get"
+    },
+    {
+      "file": "src/vs/workbench/services/lifecycle/electron-browser/lifecycleService.ts",
+      "kind": "renderer:send"
+    },
+    {
+      "file": "src/vs/workbench/services/localTranscription/electron-browser/localTranscriptionService.ts",
+      "kind": "client:get"
+    },
+    {
+      "file": "src/vs/workbench/services/output/common/output.ts",
+      "kind": "server:register"
+    },
+    {
+      "file": "src/vs/workbench/services/output/common/output.ts",
+      "kind": "client:get"
+    },
+    {
+      "file": "src/vs/workbench/services/remote/common/abstractRemoteAgentService.ts",
+      "kind": "server:register"
+    },
+    {
+      "file": "src/vs/workbench/services/remote/common/abstractRemoteAgentService.ts",
+      "kind": "client:get"
+    },
+    {
+      "file": "src/vs/workbench/services/remote/common/remoteFileSystemProviderClient.ts",
+      "kind": "client:get"
+    },
+    {
+      "file": "src/vs/workbench/services/search/common/localFileSearchWorkerTypes.ts",
+      "kind": "client:get"
+    },
+    {
+      "file": "src/vs/workbench/services/search/worker/localFileSearch.ts",
+      "kind": "client:get"
+    },
+    {
+      "file": "src/vs/workbench/services/sharedProcess/electron-browser/sharedProcessService.ts",
+      "kind": "server:register"
+    },
+    {
+      "file": "src/vs/workbench/services/sharedProcess/electron-browser/sharedProcessService.ts",
+      "kind": "client:get"
+    },
+    {
+      "file": "src/vs/workbench/services/textMate/browser/backgroundTokenization/worker/textMateTokenizationWorker.worker.ts",
+      "kind": "client:get"
+    },
+    {
+      "file": "src/vs/workbench/services/textMate/browser/backgroundTokenization/worker/textMateWorkerHost.ts",
+      "kind": "client:get"
+    },
+    {
+      "file": "src/vs/workbench/services/utilityProcess/electron-browser/utilityProcessWorkerWorkbenchService.ts",
+      "kind": "client:get"
+    },
+    {
+      "file": "src/vs/workbench/test/electron-browser/workbenchTestServices.ts",
+      "kind": "server:register"
+    },
+    {
+      "file": "src/vs/workbench/test/electron-browser/workbenchTestServices.ts",
+      "kind": "client:get"
+    }
+  ]
+}
