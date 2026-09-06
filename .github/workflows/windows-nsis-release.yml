@@ -50,6 +50,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Phase 2 tripwire (ROADMAP.md "Minutes-to-Update"): the checked-in
+      # compat/ipc-contract.json must match a fresh scan of the renderer IPC
+      # surface. Fails when the upstream merge / any src change drifted the
+      # surface without regenerating the contract — run
+      # `node build/ipc-contract/extract-ipc-contract.mjs` and commit it.
+      - name: IPC contract drift check
+        shell: pwsh
+        run: node build/ipc-contract/extract-ipc-contract.mjs --check
+
       # Compiled-output cache (the big speed lever for this pipeline). Exact
       # key only — no restore-keys, because a partial or stale out/ would
       # poison every downstream step. The key covers the complete compile
@@ -345,6 +354,12 @@ jobs:
         with:
           workspaces: src-tauri
           key: windows
+
+      # Mountain channel services (storage/logger/profiles/keyboardLayout/
+      # nativeHost): the contract-shaped unit tests from the Phase 2/3
+      # implementation round. Runs on the host before the bundle build.
+      - name: Rust unit tests (Mountain channels + IPC codec)
+        run: cargo test --manifest-path src-tauri/Cargo.toml
 
       - name: Cache tauri-cli binary
         id: tacli
