@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-06T20:35:05.928Z",
+  "generatedAt": "2026-09-06T22:03:47.407Z",
   "upstreamVersion": "1.138.0",
   "summary": {
     "filesScanned": 8824,
@@ -8,7 +8,7 @@
     "protocolChannelsProduct": 56,
     "protocolChannelsTestOnly": 5,
     "dynamicChannelCalls": 113,
-    "mountainChannelsImplemented": 7
+    "mountainChannelsImplemented": 8
   },
   "plainChannels": {
     "vscode:accessibilitySupportChanged": {
@@ -2507,6 +2507,7 @@
       "keyboardLayout",
       "launch",
       "localFilesystem",
+      "localPty",
       "logger",
       "nativeHost",
       "storage",

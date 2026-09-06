@@ -8,7 +8,7 @@ Regenerate with `node build/ipc-contract/extract-ipc-contract.mjs` and commit th
 - Files scanned: **8824**
 - Plain `vscode:` channels (product surface): **49** (+2 test-only)
 - Protocol service channels (product surface): **56** (+5 test-only)
-- Mountain channels answered in Rust: **7**
+- Mountain channels answered in Rust: **8**
 - Dynamic channel names (need manual tracing): **113**
 
 ## Plain channels (renderer <-> main, `ipcRenderer` surface bridged by the Wind shim)
@@ -133,6 +133,7 @@ Channels the Rust backend answers today (whole-channel `*` handlers or per-comma
 - `keyboardLayout`
 - `launch`
 - `localFilesystem`
+- `localPty`
 - `logger`
 - `nativeHost`
 - `storage`

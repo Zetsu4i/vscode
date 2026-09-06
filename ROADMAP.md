@@ -312,12 +312,23 @@ Replace Electron file service with Rust file service.
 - [x] Implement read/write/create/delete/rename/copy
 - [x] Atomic writes (temp file + rename, same guarantee SQLite gave Electron)
 - [x] fd-based stream IO for large files (open / read / write / close)
-- [ ] Implement file watching with Rust `notify` (replaces `@parcel/watcher` /
+- [x] Implement file watching with Rust `notify` (replaces `@parcel/watcher` /
       win32 `ReadDirectoryChangesW` usage — VS Code watcher semantics preserved:
-      recursive, ignore rules, batching). Watch sessions are already registered
-      with stable ids and correct unwatch; the `fileChange` event delivery is
-      the missing piece
-- [ ] Match VS Code watcher behavior
+      recursive, ignore rules, batching) — `fs_channel.rs` + `ipc.rs`:
+      each `watch(sessionId, req, resource, opts)` opens a real
+      `notify` watcher on its own thread with the upstream
+      `diskFileSystemProviderClient.ts` contract (`listen('fileChange',
+      [sessionId])` / `unwatch(sessionId, req)`), 50 ms debounce batching,
+      ADDED/UPDATED/DELETED resolution by existence at flush time (matches
+      @parcel/watcher on both inotify and ReadDirectoryChangesW),
+      `excludes`/`includes` globs matched relative to the watch root with
+      a `**`-aware segment matcher, and per-session event routing via the
+      new `ipc::fire_event_with_arg` (EventListen args are now kept)
+- [x] Match VS Code watcher behavior (per-session partitioning, string
+      error payloads on watch failure, recursive + non-recursive modes,
+      exclude-driven pruning incl. the watched directory itself)
+- [ ] Re-arm watchers when the watched directory is deleted and recreated
+      (upstream parcel watcher behavior — tracked for the next round)
 - [ ] Add encoding and BOM handling
 - [ ] Add workspace folder APIs
 - [ ] Add search file traversal hooks
@@ -333,7 +344,7 @@ Replace Electron file service with Rust file service.
 
 ## Phase 5: Terminal Service (Mountain: PTY)
 
-### Status: ⬜ Not started
+### Status: 🟦 In progress (core backend done; renderer bring-up next)
 
 ### Goal
 
@@ -341,18 +352,45 @@ Replace Electron/node-pty terminal backend with Rust PTY.
 
 ### Tasks
 
-- [ ] Implement PTY service with the Rust `portable-pty` crate (ConPTY on Windows)
+- [x] Implement PTY service with the Rust `portable-pty` crate (ConPTY on Windows)
       as a Tauri sidecar-free native service; data streams flow back to xterm.js
-      through the Wind shim's `vscode:message` protocol frames
-- [ ] Spawn default shell on Windows
-- [ ] Support write, read, resize, kill, exit
-- [ ] Integrate xterm.js renderer IPC
-- [ ] Preserve shell integration behavior
-- [ ] Preserve cwd and environment handling
+      through the Wind shim's `vscode:message` protocol frames —
+      `src-tauri/src/terminal_channel.rs` implements the full `IPtyService` /
+      `IPtyHostService` ProxyChannel surface registered as channel `localPty`
+      (electron-main app.ts line ~1447): createProcess / start / shutdown /
+      shutdownAll / input / processBinary / sendSignal / resize / clearBuffer /
+      acknowledgeDataEvent / listProcesses / getInitialCwd / getCwd /
+      attach-detach / refreshProperty / updateProperty / updateTitle /
+      updateIcon / getDefaultSystemShell / getEnvironment / getWslPath /
+      getProfiles (config merge + Windows auto-detection: PowerShell,
+      Windows PowerShell, Command Prompt, Git Bash, WSL) /
+      freePortKillProcess / set-getTerminalLayoutInfo (in-memory, survives
+      window reloads) / serializeTerminalState / reviveTerminalProcesses /
+      the auto-reply + contribution stubs, with onProcessData / onProcessReady
+      (pid + cwd + ConPTY build number via RtlGetVersion) / onProcessExit
+      events, an incremental UTF-8 decoder (chunk-boundary-safe, CJK output
+      intact) and split killer semantics so shutdown never races the exit
+      reaper
+- [x] Spawn default shell on Windows (COMSPEC / explicit profile path;)
+      Unix $SHELL for dev parity
+- [x] Support write, read, resize, kill, exit (reader thread until EOF →
+      child wait → exit code event; resize via MasterPty::resize; SIGINT
+      mapped to ^C)
+- [x] Integrate xterm.js renderer IPC (onProcessData events carry the
+      { id, event: { data } } payloads the renderer's LocalPty proxy
+      subscribes to; no renderer changes needed)
+- [ ] Preserve shell integration behavior (injectedArgs stay empty for
+      now — script injection is the next round)
+- [x] Preserve cwd and environment handling (string | UriComponents cwd,
+      env merge: inherited → resolved env → launch-config env)
+- [ ] Persistent terminal state across app restarts (serialize/revive are
+      in-memory stubs; layout info survives window reloads)
+- [ ] Dynamic cwd tracking via OSC 633/9;9 (initial cwd is reported)
 
 ### Acceptance
 
-- [ ] Integrated terminal opens and accepts input
+- [ ] Integrated terminal opens and accepts input (backend verified by
+      round-trip tests; needs a renderer smoke test on Windows)
 - [ ] Resize works
 - [ ] Multiple terminals work
 - [ ] Ctrl+C/kill works

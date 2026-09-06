@@ -15,6 +15,8 @@ tauri-build = { version = "2", features = [] }
 # `vscode:toggleDevTools` (ipc.rs). Keep during bring-up; drop in Phase 11.
 tauri = { version = "2", features = ["devtools"] }
 serde_json = "1"
+notify = "8"
+portable-pty = "0.9.0"
 
 [profile.release]
 # Keep default release settings; build speed matters for CI iteration.

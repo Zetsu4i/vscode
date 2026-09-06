@@ -31,6 +31,7 @@ mod profiles_channel;
 mod protocol;
 mod shim;
 mod storage_channel;
+mod terminal_channel;
 mod util;
 
 use tauri::Manager;

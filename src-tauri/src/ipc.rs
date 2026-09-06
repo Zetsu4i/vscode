@@ -75,9 +75,54 @@ static IPC: Mutex<Option<IpcState>> = Mutex::new(None);
 static APP_HANDLE: OnceLock<tauri::AppHandle> = OnceLock::new();
 static PROTOCOL_READY: AtomicBool = AtomicBool::new(false);
 
-/// Registered `EventListen` handlers: request id -> (channelName, event name).
-static EVENT_LISTENERS: LazyLock<Mutex<HashMap<i64, (String, String)>>> =
+/// A registered `EventListen`: the renderer called `channel.listen(event, arg)`
+/// and Rust can push `[204, id]` frames to it.
+#[derive(Clone, Debug)]
+struct EventListener {
+    channel: String,
+    event: String,
+    /// The `arg` passed to `listen` (e.g. `[sessionId]` for the
+    /// localFilesystem `fileChange` event). Value::Null when omitted.
+    arg: Value,
+}
+
+static EVENT_LISTENERS: LazyLock<Mutex<HashMap<i64, EventListener>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
+
+/// Test hook: frames delivered by fire_event*/ when running under
+/// `cargo test` (listener id, payload). The webview dispatch path is
+/// unavailable in unit tests, so Mountain channel tests assert here.
+#[cfg(test)]
+pub(crate) static TEST_FRAMES: Mutex<Vec<(i64, Value)>> = Mutex::new(Vec::new());
+
+#[cfg(test)]
+pub(crate) fn register_test_listener(id: i64, channel: &str, event: &str, arg: Value) {
+    if let Ok(mut guard) = EVENT_LISTENERS.lock() {
+        guard.insert(
+            id,
+            EventListener {
+                channel: channel.to_string(),
+                event: event.to_string(),
+                arg,
+            },
+        );
+    }
+}
+
+/// Reset the listener registry and captured frames. Tests isolate
+/// themselves with unique listener ids instead of calling this (clearing
+/// races parallel tests), but the hook stays useful for single-threaded
+/// debugging (`cargo test -- --test-threads=1`).
+#[cfg(test)]
+#[allow(dead_code)]
+pub(crate) fn clear_test_listeners() {
+    if let Ok(mut guard) = EVENT_LISTENERS.lock() {
+        guard.clear();
+    }
+    if let Ok(mut frames) = TEST_FRAMES.lock() {
+        frames.clear();
+    }
+}
 
 /// Fire a protocol event to every renderer listener registered for
 /// `(channel, event)` — the native equivalent of Electron's
@@ -85,17 +130,45 @@ static EVENT_LISTENERS: LazyLock<Mutex<HashMap<i64, (String, String)>>> =
 /// frames in ipc.ts). Called by the Mountain channel services
 /// (storage/profiles/keyboardLayout/...).
 pub fn fire_event(channel: &str, event: &str, payload: &Value) {
-    let targets: Vec<i64> = if let Ok(guard) = EVENT_LISTENERS.lock() {
+    let targets = listeners_for(channel, event, None);
+    fire_to(&targets, payload);
+}
+
+/// Fire a protocol event only to listeners of `(channel, event)` whose
+/// `listen` arg matches `arg` exactly. Required for per-session events —
+/// upstream partitions the localFilesystem `fileChange` stream by
+/// `listen('fileChange', [sessionId])` (diskFileSystemProviderClient.ts),
+/// and the pty host's per-window event scopes work the same way.
+pub fn fire_event_with_arg(channel: &str, event: &str, arg: &Value, payload: &Value) {
+    let targets = listeners_for(channel, event, Some(arg));
+    fire_to(&targets, payload);
+}
+
+fn listeners_for(channel: &str, event: &str, arg: Option<&Value>) -> Vec<i64> {
+    if let Ok(guard) = EVENT_LISTENERS.lock() {
         guard
             .iter()
-            .filter(|(_, (ch, ev))| ch == channel && ev == event)
+            .filter(|(_, l)| {
+                l.channel == channel
+                    && l.event == event
+                    && arg.map(|a| &l.arg == a).unwrap_or(true)
+            })
             .map(|(id, _)| *id)
             .collect()
     } else {
         Vec::new()
-    };
+    }
+}
+
+fn fire_to(targets: &[i64], payload: &Value) {
     for id in targets {
-        let frame = encode_frame(&json!([204, id]), payload);
+        #[cfg(test)]
+        {
+            if let Ok(mut frames) = TEST_FRAMES.lock() {
+                frames.push((*id, payload.clone()));
+            }
+        }
+        let frame = encode_frame(&json!([204, *id]), payload);
         dispatch_frame(&frame);
     }
 }
@@ -268,13 +341,22 @@ fn on_protocol_frame(frame_b64: &str) {
         101 => { /* PromiseCancel: no active long-running requests yet. */ }
         102 => {
             // EventListen: [102, id, channelName, name] + arg. Register so Rust
-            // can fire [204, id] frames later; never answered otherwise.
+            // can fire [204, id] frames later; never answered otherwise. The
+            // arg is kept — it identifies the event stream for per-session
+            // events (localFilesystem fileChange pty host window events).
             let channel_name = header_arr.get(2).and_then(Value::as_str).unwrap_or("").to_string();
             let event = header_arr.get(3).and_then(Value::as_str).unwrap_or("").to_string();
             let call_desc = format!("protocol:{}:listen:{}", channel_name, event);
             log_call(&call_desc, std::slice::from_ref(&body), "listen");
             if let Ok(mut guard) = EVENT_LISTENERS.lock() {
-                guard.insert(id, (channel_name, event));
+                guard.insert(
+                    id,
+                    EventListener {
+                        channel: channel_name,
+                        event,
+                        arg: body,
+                    },
+                );
             }
         }
         103 => {
@@ -352,6 +434,10 @@ fn route_channel_request(
         // FileService's disk backend (settings, keybindings, workspace
         // files, extensions metadata, ...).
         ("localFilesystem", _) => crate::fs_channel::handle(command, arg),
+
+        // localPty: IPtyService/IPtyHostService over portable-pty (ConPTY
+        // on Windows) — the integrated terminal backend.
+        ("localPty", _) => crate::terminal_channel::handle(command, arg),
 
         // ---- process / launch ----
         ("process", "getMainProcessPid") | ("launch", "getMainProcessPid") => {

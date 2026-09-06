@@ -20,10 +20,20 @@
 //!   open(resource, opts) / read / write / close  -> fd-based stream IO
 //!   watch(session, resource, opts) / unwatch     -> watcher sessions
 //!
-//! Watchers are registered (stable session ids, correct unwatch) but do not
-//! emit `fileChange` events yet — the `notify`-crate integration is Phase 4
-//! (ROADMAP.md). Until then the behavior matches "no external changes
-//! detected", which is indistinguishable for a freshly-created data dir.
+//! File watching (Phase 4) is real: each `watch(sessionId, req, resource,
+//! opts)` request opens a `notify` watcher (ReadDirectoryChangesW on
+//! Windows, inotify on Linux) on its own thread, coalesces events in a
+//! 50 ms window (matching upstream's debounce), resolves each path to
+//! ADDED/UPDATED/DELETED semantics and delivers `IFileChange[]` payloads
+//! on the per-session `fileChange` event — exactly the contract of
+//! diskFileSystemProviderServer.ts / diskFileSystemProviderClient.ts:
+//!
+//!   listen('fileChange', [sessionId]) -> IFileChange[] | string(error)
+//!   watch(sessionId: string, req: string, resource, opts) -> void
+//!   unwatch(sessionId: string, req: string) -> void
+//!
+//! `excludes`/`includes` globs are matched relative to the watched folder
+//! with a `**`-aware matcher (no regex dependency).
 //!
 //! Parity note (full trust): Electron's localFilesystem channel deliberately
 //! exposes the whole disk to the renderer — that is the desktop contract
@@ -31,12 +41,15 @@
 //! that contract; no sandboxing is applied beyond rejecting non-`file`
 //! schemes, exactly like the Node implementation does.
 
+use notify::event::{EventKind, ModifyKind, RenameMode};
+use notify::Watcher;
 use serde_json::{json, Value};
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicI64, Ordering};
-use std::sync::{LazyLock, Mutex};
+use std::sync::{mpsc::RecvTimeoutError, LazyLock, Mutex};
+use std::time::Duration;
 
 // FileType (src/vs/platform/files/common/files.ts)
 const FILE_TYPE_UNKNOWN: i64 = 0;
@@ -44,11 +57,25 @@ const FILE_TYPE_FILE: i64 = 1;
 const FILE_TYPE_DIRECTORY: i64 = 2;
 const FILE_TYPE_SYMBOLIC_LINK: i64 = 64;
 
+// FileChangeType (src/vs/platform/files/common/files.ts)
+const FILE_CHANGE_UPDATED: i64 = 0;
+const FILE_CHANGE_ADDED: i64 = 1;
+const FILE_CHANGE_DELETED: i64 = 2;
+
+/// Upstream debounces watcher events before flushing to the renderer;
+/// @parcel/watcher uses a 50 ms window, mirrored here.
+const WATCH_DEBOUNCE: Duration = Duration::from_millis(50);
+
 static NEXT_FD: AtomicI64 = AtomicI64::new(1000);
 static OPEN_FILES: LazyLock<Mutex<std::collections::HashMap<i64, File>>> =
     LazyLock::new(|| Mutex::new(std::collections::HashMap::new()));
-static WATCH_SESSIONS: LazyLock<Mutex<std::collections::HashMap<i64, String>>> =
-    LazyLock::new(|| Mutex::new(std::collections::HashMap::new()));
+
+/// Active watch requests, keyed by the renderer's `(sessionId, req)` UUID
+/// pair (diskFileSystemProviderClient.ts). Dropping the watcher stops the
+/// event thread (the mpsc sender dies with it).
+static WATCH_REQUESTS: LazyLock<
+    Mutex<std::collections::HashMap<(String, String), notify::RecommendedWatcher>>,
+> = LazyLock::new(|| Mutex::new(std::collections::HashMap::new()));
 
 /// Handle one `localFilesystem` channel request.
 pub fn handle(command: &str, arg: &Value) -> Result<Value, String> {
@@ -271,28 +298,359 @@ pub fn handle(command: &str, arg: &Value) -> Result<Value, String> {
             Ok(json!(written as i64))
         }
         "watch" => {
-            // watch(sessionKey: string, recursive: number, resource, opts)
+            // watch(sessionId: string, req: string, resource, opts) -> void
+            // (diskFileSystemProviderServer.ts watch command — note the
+            // renderer generates both ids itself; the call resolves void).
+            let session_id = arg0
+                .as_str()
+                .ok_or_else(|| "localFilesystem: watch expects a session id string".to_string())?
+                .to_string();
+            let req = args
+                .get(1)
+                .and_then(Value::as_str)
+                .ok_or_else(|| "localFilesystem: watch expects a request id string".to_string())?
+                .to_string();
             let resource = args.get(2).cloned().unwrap_or(Value::Null);
+            let opts = args.get(3).cloned().unwrap_or(Value::Null);
             let path = uri_to_path(&resource)?;
-            let session = NEXT_FD.fetch_add(1, Ordering::Relaxed);
-            if let Ok(mut guard) = WATCH_SESSIONS.lock() {
-                guard.insert(session, path.to_string_lossy().to_string());
+            let recursive = opts.get("recursive").and_then(Value::as_bool).unwrap_or(true);
+            let excludes = opt_globs(&opts, "excludes");
+            let includes = opt_globs(&opts, "includes");
+
+            let watcher = start_watcher(&session_id, &path, recursive, excludes, includes);
+            if let Ok(mut guard) = WATCH_REQUESTS.lock() {
+                guard.insert((session_id, req), watcher);
             }
-            crate::logger::log_app(
-                "info",
-                &format!("localFilesystem: watch session {} on {:?} (notify integration: Phase 4)", session, path),
-            );
-            Ok(json!(session))
+            Ok(Value::Null)
         }
         "unwatch" => {
-            let session = args.get(1).and_then(Value::as_i64).unwrap_or(-1);
-            if let Ok(mut guard) = WATCH_SESSIONS.lock() {
-                guard.remove(&session);
+            // unwatch(sessionId: string, req: string) -> void
+            let session_id = arg0.as_str().unwrap_or("").to_string();
+            let req = args.get(1).and_then(Value::as_str).unwrap_or("").to_string();
+            if let Ok(mut guard) = WATCH_REQUESTS.lock() {
+                guard.remove(&(session_id, req)); // drop -> watcher + thread stop
             }
             Ok(Value::Null)
         }
         other => Err(format!("localFilesystem channel: call not found: {}", other)),
     }
+}
+
+// ---------------------------------------------------------------------------
+// File watching (Phase 4 — the `notify` integration)
+// ---------------------------------------------------------------------------
+
+/// Read a glob-pattern array (`excludes` / `includes`) from IWatchOptions.
+fn opt_globs(opts: &Value, key: &str) -> Vec<String> {
+    opts.get(key)
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(Value::as_str)
+                .map(str::to_string)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Open a notify watcher on `path` and spawn its event thread. The returned
+/// watcher must stay alive (WATCH_REQUESTS) or the thread exits.
+fn start_watcher(
+    session_id: &str,
+    path: &Path,
+    recursive: bool,
+    excludes: Vec<String>,
+    includes: Vec<String>,
+) -> notify::RecommendedWatcher {
+    let (tx, rx) = std::sync::mpsc::channel::<notify::Result<notify::Event>>();
+    let mut watcher = notify::recommended_watcher(tx)
+        .unwrap_or_else(|err| panic!("cannot create watcher: {}", err));
+    let mode = if recursive {
+        notify::RecursiveMode::Recursive
+    } else {
+        notify::RecursiveMode::NonRecursive
+    };
+    // A missing/unwatchable path is delivered as the string error payload of
+    // the fileChange event (upstream: onDidWatchError), not a rejected call.
+    if let Err(err) = watcher.watch(path, mode) {
+        crate::ipc::fire_event_with_arg(
+            "localFilesystem",
+            "fileChange",
+            &json!([session_id]),
+            &json!(format!("VSTauri watcher error on {}: {}", path.display(), err)),
+        );
+        crate::logger::log_app(
+            "warn",
+            &format!("localFilesystem: watch {:?} failed: {}", path, err),
+        );
+    } else {
+        crate::logger::log_app(
+            "info",
+            &format!(
+                "localFilesystem: watching {:?} ({} session {})",
+                path,
+                if recursive { "recursive" } else { "non-recursive" },
+                session_id
+            ),
+        );
+    }
+
+    let session_arg = json!([session_id]);
+    let root = path.to_path_buf();
+    let session = session_id.to_string();
+    std::thread::Builder::new()
+        .name(format!("vstauri-fswatch-{}", session_id))
+        .spawn(move || watch_event_loop(rx, root, excludes, includes, session, session_arg))
+        .ok();
+
+    watcher
+}
+
+/// Per-path pending state within a debounce window: whether any Create
+/// (or rename-To) was seen. Final ADDED/UPDATED/DELETED is resolved by
+/// existence at flush time, which reproduces @parcel/watcher semantics
+/// on both inotify (Create + Modify bursts) and ReadDirectoryChangesW.
+struct PendingChange {
+    saw_create: bool,
+}
+
+fn watch_event_loop(
+    rx: std::sync::mpsc::Receiver<notify::Result<notify::Event>>,
+    root: PathBuf,
+    excludes: Vec<String>,
+    includes: Vec<String>,
+    session: String,
+    session_arg: Value,
+) {
+    let mut pending: std::collections::HashMap<PathBuf, PendingChange> =
+        std::collections::HashMap::new();
+    loop {
+        match rx.recv_timeout(WATCH_DEBOUNCE) {
+            Ok(Ok(event)) => {
+                for (path, change_type) in classify_event(&event) {
+                    if !path_starts_with(&path, &root) {
+                        continue;
+                    }
+                    if is_excluded(&root, &path, &excludes, &includes) {
+                        continue;
+                    }
+                    let entry = pending.entry(path).or_insert(PendingChange { saw_create: false });
+                    if change_type == FILE_CHANGE_ADDED {
+                        entry.saw_create = true;
+                    }
+                }
+            }
+            Ok(Err(err)) => {
+                // Watcher-level error: upstream surfaces these as the string
+                // variant of the fileChange payload.
+                crate::ipc::fire_event_with_arg(
+                    "localFilesystem",
+                    "fileChange",
+                    &session_arg,
+                    &json!(format!("VSTauri watcher error: {}", err)),
+                );
+            }
+            Err(RecvTimeoutError::Timeout) => {
+                flush_pending(&mut pending, &session_arg);
+            }
+            Err(RecvTimeoutError::Disconnected) => {
+                // The watcher was dropped (unwatch / dispose): last flush, exit.
+                flush_pending(&mut pending, &session_arg);
+                break;
+            }
+        }
+    }
+    let _ = session; // kept for thread naming/debug
+}
+
+/// Resolve pending paths into `IFileChange[]` and fire the per-session
+/// `fileChange` event.
+fn flush_pending(
+    pending: &mut std::collections::HashMap<PathBuf, PendingChange>,
+    session_arg: &Value,
+) {
+    if pending.is_empty() {
+        return;
+    }
+    let mut events = Vec::with_capacity(pending.len());
+    for (path, state) in pending.drain() {
+        // Final type by existence: gone -> DELETED; new -> ADDED; else UPDATED.
+        let change_type = if !path.exists() {
+            FILE_CHANGE_DELETED
+        } else if state.saw_create {
+            FILE_CHANGE_ADDED
+        } else {
+            FILE_CHANGE_UPDATED
+        };
+        events.push(json!({
+            "resource": path_to_uri(&path),
+            "type": change_type,
+        }));
+    }
+    crate::ipc::fire_event_with_arg(
+        "localFilesystem",
+        "fileChange",
+        session_arg,
+        &Value::Array(events),
+    );
+}
+
+/// Map one notify event to `(path, FileChangeType)` pairs. Access events
+/// (open/close/read) are dropped — upstream does not report them either.
+fn classify_event(event: &notify::Event) -> Vec<(PathBuf, i64)> {
+    let kind = &event.kind;
+    match kind {
+        EventKind::Create(_) => event.paths.iter().map(|p| (p.clone(), FILE_CHANGE_ADDED)).collect(),
+        EventKind::Remove(_) => {
+            event.paths.iter().map(|p| (p.clone(), FILE_CHANGE_DELETED)).collect()
+        }
+        EventKind::Modify(ModifyKind::Name(rename_mode)) => match rename_mode {
+            RenameMode::From => {
+                event.paths.iter().map(|p| (p.clone(), FILE_CHANGE_DELETED)).collect()
+            }
+            RenameMode::To => {
+                event.paths.iter().map(|p| (p.clone(), FILE_CHANGE_ADDED)).collect()
+            }
+            RenameMode::Both => {
+                // paths = [old, new]: old removed, new added.
+                let mut out = Vec::with_capacity(2);
+                if let Some(old) = event.paths.first() {
+                    out.push((old.clone(), FILE_CHANGE_DELETED));
+                }
+                if let Some(new) = event.paths.get(1) {
+                    out.push((new.clone(), FILE_CHANGE_ADDED));
+                }
+                out
+            }
+            _ => event.paths.iter().map(|p| (p.clone(), FILE_CHANGE_UPDATED)).collect(),
+        },
+        EventKind::Modify(_) => {
+            event.paths.iter().map(|p| (p.clone(), FILE_CHANGE_UPDATED)).collect()
+        }
+        EventKind::Access(_) | EventKind::Other | EventKind::Any => Vec::new(),
+    }
+}
+
+/// `path.starts_with(root)` that also tolerates prefix mismatch on
+/// case-insensitive systems — notify always reports watched-root-prefixed
+/// paths, this is just a guard against backend quirks.
+fn path_starts_with(path: &Path, root: &Path) -> bool {
+    path.starts_with(root)
+        || path
+            .to_string_lossy()
+            .to_lowercase()
+            .starts_with(&root.to_string_lossy().to_lowercase())
+}
+
+/// Apply `excludes` (skip match) and `includes` (allow-list) to one path.
+/// Globs are matched relative to the watched root; absolute patterns fall
+/// back to matching the full path.
+fn is_excluded(root: &Path, path: &Path, excludes: &[String], includes: &[String]) -> bool {
+    if excludes.is_empty() && includes.is_empty() {
+        return false;
+    }
+    let full = path.to_string_lossy().replace('\\', "/");
+    let rel = path
+        .strip_prefix(root)
+        .map(|r| r.to_string_lossy().replace('\\', "/"))
+        .unwrap_or_else(|_| full.clone());
+    for pattern in excludes {
+        let pat = pattern.replace('\\', "/");
+        if glob_match(&pat, &rel) || glob_match(&pat, &full) {
+            return true;
+        }
+    }
+    if !includes.is_empty() {
+        let allowed = includes.iter().any(|pattern| {
+            let pat = pattern.replace('\\', "/");
+            glob_match(&pat, &rel) || glob_match(&pat, &full)
+        });
+        if !allowed {
+            return true;
+        }
+    }
+    false
+}
+
+/// `*` / `?` / `**` glob matcher on `/`-separated paths (no regex crate).
+/// A `**` segment matches zero or more whole segments (so `**/x/**` matches
+/// the `x` directory itself — required for exclude-based pruning — and
+/// everything under it); `*` and `?` stay within one segment. Empty
+/// segments and `.` are dropped on both sides, so absolute patterns
+/// (`/C:/x/**`) match normalized absolute paths.
+fn glob_match(pattern: &str, path: &str) -> bool {
+    // Windows callers pass backslash-separated paths/patterns — normalize
+    // both sides so matching is separator-agnostic.
+    let pattern = pattern.replace('\\', "/");
+    let path = path.replace('\\', "/");
+    let pattern_segs: Vec<&str> = pattern
+        .split('/')
+        .filter(|seg| !seg.is_empty() && *seg != ".")
+        .collect();
+    let path_segs: Vec<&str> = path
+        .split('/')
+        .filter(|seg| !seg.is_empty() && *seg != ".")
+        .collect();
+    match_segments(&pattern_segs, &path_segs)
+}
+
+/// Segment-level matching with `**` backtracking.
+fn match_segments(pattern: &[&str], path: &[&str]) -> bool {
+    if pattern.is_empty() {
+        return path.is_empty();
+    }
+    if pattern[0] == "**" {
+        // "**" consumes zero or more whole segments.
+        for skip in 0..=path.len() {
+            if match_segments(&pattern[1..], &path[skip..]) {
+                return true;
+            }
+        }
+        return false;
+    }
+    if path.is_empty() {
+        return false;
+    }
+    if !segment_match(pattern[0].as_bytes(), path[0].as_bytes()) {
+        return false;
+    }
+    match_segments(&pattern[1..], &path[1..])
+}
+
+/// In-segment wildcard matching (`*`, `?`); segments never contain
+/// separators so `*` may consume any run of characters.
+fn segment_match(mut pat: &[u8], mut name: &[u8]) -> bool {
+    while !pat.is_empty() {
+        match pat[0] {
+            b'*' => {
+                let rest = &pat[1..];
+                let mut i = 0usize;
+                while i <= name.len() {
+                    if segment_match(rest, &name[i..]) {
+                        return true;
+                    }
+                    i += 1;
+                }
+                return false;
+            }
+            b'?' => {
+                if name.is_empty() {
+                    return false;
+                }
+                pat = &pat[1..];
+                name = &name[1..];
+            }
+            c => {
+                if name.is_empty() || name[0] != c {
+                    return false;
+                }
+                pat = &pat[1..];
+                name = &name[1..];
+            }
+        }
+    }
+    name.is_empty()
 }
 
 // ---------------------------------------------------------------------------
@@ -507,18 +865,150 @@ mod tests {
     }
 
     #[test]
-    fn watch_sessions_get_ids_and_unwatch() {
+    fn watch_emits_added_updated_and_deleted_per_session() {
+        // Note: no clear_test_listeners() here — tests run in parallel and
+        // share the listener registry; each test uses unique listener ids
+        // and filters frames by them.
         let tmp = std::env::temp_dir().join(format!("vstauri-fs-watch-{}", std::process::id()));
-        std::fs::create_dir_all(&tmp).unwrap();
-        let session = handle(
-            "watch",
-            &json!(["", 1, uri(&tmp.to_string_lossy().replace('\\', "/")), { "recursive": true }]),
-        )
-        .expect("watch")
-        .as_i64()
-        .unwrap();
-        handle("unwatch", &json!(["", session])).expect("unwatch");
-        assert!(WATCH_SESSIONS.lock().unwrap().get(&session).is_none());
         let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+
+        // Renderer-side session ids (UUID strings upstream; plain strings here).
+        let session = "sess-watch-test";
+        // Two sessions to prove events are partitioned per listen arg.
+        crate::ipc::register_test_listener(11, "localFilesystem", "fileChange", json!([session]));
+        crate::ipc::register_test_listener(12, "localFilesystem", "fileChange", json!(["other"]));
+
+        let dir_uri = uri(&tmp.to_string_lossy().replace('\\', "/"));
+        handle(
+            "watch",
+            &json!([session, "req-1", dir_uri, { "recursive": true, "excludes": [] }]),
+        )
+        .expect("watch");
+
+        // File created -> ADDED (1)
+        std::fs::write(tmp.join("created.txt"), b"hello").unwrap();
+        // File created then deleted within the window -> DELETED (2)
+        std::fs::write(tmp.join("ephemeral.txt"), b"x").unwrap();
+        std::fs::remove_file(tmp.join("ephemeral.txt")).unwrap();
+        // Existing file modified -> UPDATED (0)
+        std::fs::write(tmp.join("modified.txt"), b"1").unwrap();
+        std::thread::sleep(Duration::from_millis(120));
+        std::fs::write(tmp.join("modified.txt"), b"2").unwrap();
+
+        // Wait past the debounce window.
+        std::thread::sleep(Duration::from_millis(400));
+
+        handle("unwatch", &json!([session, "req-1"])).expect("unwatch");
+
+        let frames = crate::ipc::TEST_FRAMES
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let mut saw_created = false;
+        let mut saw_deleted = false;
+        let mut saw_updated = false;
+        let marker = "vstauri-fs-watch";
+        for (id, payload) in frames.iter() {
+            if *id == 12 {
+                // The "other" session must never see this session's files.
+                assert!(
+                    !payload.to_string().contains(marker),
+                    "events leaked across sessions: {}",
+                    payload
+                );
+            }
+            if *id != 11 {
+                continue; // frames from tests running in parallel
+            }
+            let Some(events) = payload.as_array() else { continue };
+            for event in events {
+                let path = event["resource"]["path"].as_str().unwrap_or_default();
+                let change_type = event["type"].as_i64().unwrap_or(-1);
+                if path.ends_with("created.txt") && change_type == FILE_CHANGE_ADDED {
+                    saw_created = true;
+                }
+                if path.ends_with("ephemeral.txt") && change_type == FILE_CHANGE_DELETED {
+                    saw_deleted = true;
+                }
+                if path.ends_with("modified.txt") && change_type == FILE_CHANGE_UPDATED {
+                    saw_updated = true;
+                }
+            }
+        }
+        assert!(saw_created, "ADDED for created.txt missing: {:?}", *frames);
+        assert!(saw_deleted, "DELETED for ephemeral.txt missing: {:?}", *frames);
+        assert!(saw_updated, "UPDATED for modified.txt missing: {:?}", *frames);
+        drop(frames);
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn watch_excludes_are_glob_matched() {
+        let tmp = std::env::temp_dir().join(format!("vstauri-fs-excl-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(tmp.join("node_modules/pkg")).unwrap();
+
+        let session = "sess-excl";
+        crate::ipc::register_test_listener(21, "localFilesystem", "fileChange", json!([session]));
+        let dir_uri = uri(&tmp.to_string_lossy().replace('\\', "/"));
+        handle(
+            "watch",
+            &json!([session, "req-1", dir_uri, {
+                "recursive": true,
+                "excludes": ["**/node_modules/**"]
+            }]),
+        )
+        .expect("watch");
+
+        std::fs::write(tmp.join("node_modules/pkg/junk.js"), b"").unwrap();
+        std::fs::write(tmp.join("visible.js"), b"").unwrap();
+        std::thread::sleep(Duration::from_millis(400));
+        handle("unwatch", &json!([session, "req-1"])).expect("unwatch");
+
+        let frames = crate::ipc::TEST_FRAMES
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let mut all_paths = String::new();
+        for (id, payload) in frames.iter() {
+            if *id != 21 {
+                continue; // frames from tests running in parallel
+            }
+            all_paths.push_str(&payload.to_string());
+        }
+        assert!(!all_paths.contains("junk.js"), "excluded file leaked: {}", all_paths);
+        assert!(all_paths.contains("visible.js"), "visible file missing: {}", all_paths);
+        drop(frames);
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn glob_matcher_covers_watcher_patterns() {
+        assert!(glob_match("**/node_modules/**", "node_modules"));
+        assert!(glob_match("**/node_modules/**", "node_modules/foo"));
+        assert!(glob_match("**/node_modules/**", "a/b/node_modules/c/d.js"));
+        assert!(!glob_match("**/node_modules/**", "a/b/c.js"));
+        assert!(glob_match("**/.git/objects/**", ".git/objects/pack/x.pack"));
+        assert!(glob_match("**/*.log", "debug.log"));
+        assert!(glob_match("**/*.log", "nested/deeper/error.log"));
+        assert!(!glob_match("**/*.log", "nested/deeper/error.txt"));
+        assert!(glob_match("*.log", "debug.log"));
+        assert!(!glob_match("*.log", "nested/debug.log"));
+        assert!(glob_match("src/**", "src"));
+        assert!(glob_match("src/**", "src/main.rs"));
+        assert!(!glob_match("src/**", "lib/main.rs"));
+        assert!(glob_match("a?c.js", "abc.js"));
+        assert!(!glob_match("a?c.js", "abcd.js"));
+        assert!(glob_match("**", "any/thing/at/all"));
+        assert!(glob_match("exact.txt", "exact.txt"));
+        assert!(!glob_match("exact.txt", "other.txt"));
+        // Windows separators are normalized before matching.
+        assert!(glob_match("**/node_modules/**", "node_modules\\foo"));
+        // '**/x' also matches a bare 'x' (leading zero segments).
+        assert!(glob_match("**/dist", "dist"));
+        assert!(glob_match("**/dist", "build/dist"));
+        assert!(!glob_match("**/dist", "build/dist/x"));
+        // Absolute patterns (leading slash) match absolute paths.
+        assert!(glob_match("/C:/proj/**", "/C:/proj/src/main.rs"));
+        assert!(!glob_match("/C:/proj/**", "/C:/other/main.rs"));
     }
 }
