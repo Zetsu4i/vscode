@@ -91,3 +91,41 @@ pub fn unix_timestamp() -> String {
         .unwrap_or_default();
     format!("{}.{:09}", d.as_secs(), d.subsec_nanos())
 }
+
+/// Wall-clock timestamp for logger files: `("YYYY-MM-DD HH:MM:SS", counter)`
+/// mirroring the spdlog line format VS Code log files use
+/// (`[2024-01-02 03:04:05.006]`).
+pub fn format_log_timestamp() -> (String, u64) {
+    let d = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default();
+    let secs = d.as_secs();
+    let millis = d.subsec_millis() as u64;
+
+    // Civil-from-days conversion (Howard Hinnant's algorithm).
+    let days = (secs / 86_400) as i64;
+    let secs_of_day = secs % 86_400;
+    let z = days + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z.rem_euclid(146_097);
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let y = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let day = doy - (153 * mp + 2) / 5 + 1;
+    let month = if mp < 10 { mp + 3 } else { mp - 9 };
+    let year = if month <= 2 { y + 1 } else { y };
+
+    (
+        format!(
+            "{:04}-{:02}-{:02} {:02}:{:02}:{:02}",
+            year,
+            month,
+            day,
+            secs_of_day / 3600,
+            (secs_of_day % 3600) / 60,
+            secs_of_day % 60
+        ),
+        millis,
+    )
+}

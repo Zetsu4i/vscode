@@ -48,6 +48,24 @@ use std::sync::{LazyLock, Mutex, OnceLock};
 
 use tauri::Manager;
 
+/// Marker object key lifting binary VSBuffer payloads through
+/// serde_json::Value (see encode_value/decode_value).
+const VSBUFFER_KEY: &str = "__vsc_vsbuffer_b64__";
+
+/// Wrap raw bytes as a VSBuffer marker value (encoded as DataType::VSBuffer
+/// on the wire). Public for channel services returning binary data
+/// (localFilesystem readFile and friends).
+pub fn vsbuffer(bytes: &[u8]) -> Value {
+    json!({ VSBUFFER_KEY: base64_encode(bytes) })
+}
+
+/// Extract the bytes from a VSBuffer marker value (decoded from a
+/// DataType::VSBuffer wire payload).
+pub fn vsbuffer_bytes(value: &Value) -> Option<Vec<u8>> {
+    let b64 = value.as_object()?.get(VSBUFFER_KEY)?.as_str()?;
+    base64_decode(b64)
+}
+
 struct IpcState {
     log: Option<File>,
     counts: HashMap<String, u64>,
@@ -60,6 +78,27 @@ static PROTOCOL_READY: AtomicBool = AtomicBool::new(false);
 /// Registered `EventListen` handlers: request id -> (channelName, event name).
 static EVENT_LISTENERS: LazyLock<Mutex<HashMap<i64, (String, String)>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
+
+/// Fire a protocol event to every renderer listener registered for
+/// `(channel, event)` — the native equivalent of Electron's
+/// `webContents.send`-backed `ChannelServer` event delivery ([204, id]
+/// frames in ipc.ts). Called by the Mountain channel services
+/// (storage/profiles/keyboardLayout/...).
+pub fn fire_event(channel: &str, event: &str, payload: &Value) {
+    let targets: Vec<i64> = if let Ok(guard) = EVENT_LISTENERS.lock() {
+        guard
+            .iter()
+            .filter(|(_, (ch, ev))| ch == channel && ev == event)
+            .map(|(id, _)| *id)
+            .collect()
+    } else {
+        Vec::new()
+    };
+    for id in targets {
+        let frame = encode_frame(&json!([204, id]), payload);
+        dispatch_frame(&frame);
+    }
+}
 
 /// Open the call log inside the logs directory.
 pub fn init(logs_dir: &Path) {
@@ -290,65 +329,36 @@ fn route_channel_request(
     app: Option<&tauri::AppHandle>,
     channel: &str,
     command: &str,
-    _arg: &Value,
+    arg: &Value,
 ) -> Result<Value, String> {
     match (channel, command) {
-        // ---- nativeHost: window state + operations (INativeHostService) ----
-        ("nativeHost", "windowId") => Ok(json!(1)),
-        ("nativeHost", "getOS") => Ok(json!("Windows")),
-        ("nativeHost", "getOSRelease") => Ok(json!(os_release())),
-        ("nativeHost", "getOSVersion") => Ok(json!(os_version())),
-        ("nativeHost", "hostname") => Ok(json!(hostname())),
-        ("nativeHost", "getProcessMemoryInfo") => {
-            Ok(json!({ "private": 0, "residentSet": 0, "shared": 0 }))
-        }
-        ("nativeHost", "isFocused") => Ok(json!(window_state(app, |w| w.is_focused()))),
-        ("nativeHost", "isMaximized") => Ok(json!(window_state(app, |w| w.is_maximized()))),
-        ("nativeHost", "isFullScreen") => Ok(json!(window_state(app, |w| w.is_fullscreen()))),
-        ("nativeHost", "focusWindow") => {
-            with_window(app, |w| {
-                let _ = w.set_focus();
-            });
-            Ok(Value::Null)
-        }
-        ("nativeHost", "minimizeWindow") | ("nativeHost", "minimize") => {
-            with_window(app, |w| {
-                let _ = w.minimize();
-            });
-            Ok(Value::Null)
-        }
-        ("nativeHost", "maximizeWindow") | ("nativeHost", "maximize") => {
-            with_window(app, |w| {
-                let _ = w.maximize();
-            });
-            Ok(Value::Null)
-        }
-        ("nativeHost", "unmaximizeWindow") => {
-            with_window(app, |w| {
-                let _ = w.unmaximize();
-            });
-            Ok(Value::Null)
-        }
-        ("nativeHost", "toggleWindowFullScreen") => {
-            let fullscreen = window_state(app, |w| w.is_fullscreen());
-            with_window(app, move |w| {
-                let _ = w.set_fullscreen(!fullscreen);
-            });
-            Ok(Value::Null)
-        }
-        ("nativeHost", "closeWindow") => {
-            with_window(app, |w| {
-                let _ = w.close();
-            });
-            Ok(Value::Null)
-        }
-        ("nativeHost", "getCacheHome") => Ok(crate::config::cache_home_uri()),
+        // nativeHost: the full INativeHostService surface (ProxyChannel,
+        // args = [windowId, ...methodArgs])
+        ("nativeHost", _) => crate::native_host::handle(app, command, arg),
 
-        // ---- process ----
-        ("process", "getMainProcessPid") => Ok(json!(std::process::id() as i64)),
+        // storage: StorageDatabaseChannel (arg is an ISerializableRequest object)
+        ("storage", _) => crate::storage_channel::handle(command, arg),
 
-        // ---- launch ----
-        ("launch", "getMainProcessPid") => Ok(json!(std::process::id() as i64)),
+        // logger: electron-main LoggerChannel (arg is an argument array)
+        ("logger", _) => crate::logger_channel::handle(command, arg),
+
+        // userDataProfiles: profile CRUD over profiles.json
+        ("userDataProfiles", _) => crate::profiles_channel::handle(command, arg),
+
+        // keyboardLayout: INativeKeyboardLayoutService
+        ("keyboardLayout", _) => crate::keyboard_channel::handle(command, arg),
+
+        // localFilesystem: DiskFileSystemProviderChannel — the renderer
+        // FileService's disk backend (settings, keybindings, workspace
+        // files, extensions metadata, ...).
+        ("localFilesystem", _) => crate::fs_channel::handle(command, arg),
+
+        // ---- process / launch ----
+        ("process", "getMainProcessPid") | ("launch", "getMainProcessPid") => {
+            Ok(json!(std::process::id() as i64))
+        }
+        ("launch", "getOS") => Ok(json!("Windows")),
+        ("launch", "getOSRelease") => Ok(json!("10.0.0")),
 
         // Everything else is a faithful "channel not registered" rejection —
         // same outcome as Electron's 1s pending-request timeout, and the call
@@ -358,40 +368,6 @@ fn route_channel_request(
             channel, command
         )),
     }
-}
-
-fn with_window(app: Option<&tauri::AppHandle>, op: impl FnOnce(&tauri::WebviewWindow)) {
-    if let Some(app) = app {
-        if let Some(window) = app.get_webview_window("main") {
-            op(&window);
-        }
-    }
-}
-
-fn window_state(app: Option<&tauri::AppHandle>, read: impl FnOnce(&tauri::WebviewWindow) -> tauri::Result<bool>) -> bool {
-    if let Some(app) = app {
-        if let Some(window) = app.get_webview_window("main") {
-            return read(&window).unwrap_or(false);
-        }
-    }
-    false
-}
-
-fn os_release() -> String {
-    // Windows: Chromium reports the build number; good enough for display.
-    std::env::var("OS")
-        .map(|_| "10.0.0".to_string())
-        .unwrap_or_else(|_| "10.0.0".to_string())
-}
-
-fn os_version() -> String {
-    "Windows".to_string()
-}
-
-fn hostname() -> String {
-    std::env::var("COMPUTERNAME")
-        .or_else(|_| std::env::var("HOSTNAME"))
-        .unwrap_or_else(|_| "localhost".to_string())
 }
 
 // ---------------------------------------------------------------------------
@@ -442,7 +418,21 @@ fn encode_value(value: &Value, out: &mut Vec<u8>) {
                 encode_value(item, out);
             }
         }
-        Value::Object(_) => {
+        Value::Object(map) => {
+            // VSBuffer bridge: the channel codec's binary payload type. The
+            // filesystem service (localFilesystem channel) returns/accepts
+            // VSBuffer; decode_value() lifts incoming buffers into this
+            // marker and encode_value() writes them back as raw bytes.
+            if map.len() == 1 {
+                if let Some(Value::String(b64)) = map.get(VSBUFFER_KEY) {
+                    if let Some(bytes) = base64_decode(b64) {
+                        out.push(3); // DataType::VSBuffer
+                        write_vql(bytes.len() as u32, out);
+                        out.extend_from_slice(&bytes);
+                        return;
+                    }
+                }
+            }
             let payload = serde_json::to_string(value).unwrap_or_else(|_| "{}".to_string());
             out.push(5); // DataType::Object
             write_vql(payload.len() as u32, out);
@@ -490,13 +480,16 @@ fn decode_value(bytes: &[u8], cursor: &mut usize) -> Option<Value> {
             Some(json!(v))
         }
         2 | 3 => {
-            // Buffer / VSBuffer payload — keep raw; not used by routed requests.
+            // Buffer / VSBuffer payload — lifted into the base64 marker so
+            // filesystem-style commands (writeFile buffers, readFile results)
+            // round-trip binary data through the JSON layer.
             let len = read_vql(bytes, cursor)? as usize;
             if *cursor + len > bytes.len() {
                 return None;
             }
+            let b64 = base64_encode(&bytes[*cursor..*cursor + len]);
             *cursor += len;
-            Some(Value::Null)
+            Some(json!({ VSBUFFER_KEY: b64 }))
         }
         _ => None,
     }

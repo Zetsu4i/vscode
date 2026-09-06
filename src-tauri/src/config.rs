@@ -59,6 +59,10 @@ fn build(app: &tauri::AppHandle) -> Value {
     }
     crate::logger::init(&logs_dir);
     crate::ipc::init(&logs_dir);
+    crate::logger_channel::init(&logs_dir);
+    crate::storage_channel::init(&user_dir);
+    crate::profiles_channel::init(&user_dir);
+    crate::keyboard_channel::init();
 
     let machine_id = persistent_machine_id(&data_root);
     let session_id = crate::util::random_uuid_v4();
@@ -205,6 +209,14 @@ fn build(app: &tauri::AppHandle) -> Value {
 /// `createDefaultProfile()` (src/vs/platform/userDataProfile/common/userDataProfile.ts):
 /// id `__default__profile__`, location = userRoamingDataHome, every resource
 /// joined off the location, cacheHome under CachedProfilesData.
+pub fn default_profile_json(user_dir: &Path) -> Value {
+    default_profile(user_dir, &data_root())
+}
+
+/// VS Code `UriComponents` (object form accepted by `URI.revive`).
+pub fn uri_json(path: &Path) -> Value {
+    uri_components(path)
+}
 fn default_profile(user_dir: &Path, data_root: &Path) -> Value {
     let location = user_dir;
     let cache_home = data_root
@@ -237,6 +249,12 @@ pub fn cache_home_uri() -> Value {
     uri_components(&data_root().join("Cache"))
 }
 
+/// OS color scheme (nativeHost.getOSColorScheme). The workbench drives the
+/// theme from this; dark matches the compiled-in default workbench theme.
+pub fn color_scheme() -> Value {
+    json!({ "dark": true, "highContrast": false })
+}
+
 fn read_json_file(path: &Path) -> Option<Value> {
     match std::fs::read_to_string(path) {
         Ok(content) => match serde_json::from_str(&content) {
@@ -253,7 +271,9 @@ fn read_json_file(path: &Path) -> Option<Value> {
     }
 }
 
-fn data_root() -> PathBuf {
+/// Data root (`%APPDATA%/VSTauri` on Windows) shared by config, storage,
+/// profiles and logs. Public for the Mountain channel services.
+pub fn data_root() -> PathBuf {
     if let Ok(appdata) = std::env::var("APPDATA") {
         if !appdata.is_empty() {
             return PathBuf::from(appdata).join("VSTauri");

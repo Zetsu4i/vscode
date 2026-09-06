@@ -21,10 +21,16 @@
 //! (AGENTS.md constraint 5).
 
 mod config;
+mod fs_channel;
 mod ipc;
+mod keyboard_channel;
 mod logger;
+mod logger_channel;
+mod native_host;
+mod profiles_channel;
 mod protocol;
 mod shim;
+mod storage_channel;
 mod util;
 
 use tauri::Manager;
