@@ -4,32 +4,110 @@
 
 A native Windows application that is behaviorally identical to VS Code, but uses Tauri v2 instead of Electron.
 
-## Architecture
+## Architecture: "Wind & Mountain" (Shimmed Monorepo)
+
+The strategy is a two-layer abstraction pattern modeled on how bleeding-edge
+open-source editors (e.g. the Land Project) port the *native* VS Code workbench
+out of Electron without a VS Code Server, without fake UI layers, and without
+touching Microsoft's workbench code:
+
+- **The Wind layer** (UI environment shim) — the preload that replaces
+  Electron's `ipcRenderer`, `process` and window-config handshake with
+  equivalents backed by `window.__TAURI__` / Tauri IPC. The workbench source
+  is compiled *directly from the original tree*, unmodified.
+- **The Mountain layer** (Rust native backend) — implements the exact Node/Electron
+  main-process IPC surface natively in Rust: the `vscode:` plain channels, the
+  main-process message protocol (binary frames), the service channels
+  (`nativeHost`, `storage`, `logger`, `userDataProfiles`, ...), and eventually
+  PTY, file watching, and credential storage.
 
 ```
-+--------------------------------------------------------+
-| Renderer: Original VS Code Workbench UI / Monaco       |
-| Runs in WebView2                                       |
-+----------------------+----------------------------------+
-                       | Tauri IPC / JSON-RPC
-+----------------------+----------------------------------+
-| Rust/Tauri Backend                                      |
-| - Window/layout                                          |
-| - File system service                                    |
-| - Terminal/service                                       |
-| - Search service                                         |
-| - Process service                                        |
-| - Extension manager                                      |
-| - Update service                                         |
-+----------------------+----------------------------------+
-                       | stdio / IPC
-+----------------------+----------------------------------+
-| Extension Host: Node.js sidecar                         |
-| - Original VS Code extension host code                   |
-| - Executes JS extensions                                 |
-| - Provides VS Code API compatibility                     |
-+----------------------------------------------------------+
++--------------------------------------------------------------+
+|                     VSTAURI (TAURI v2) APPLICATION           |
+|                                                              |
+|   +------------------------------------------------------+   |
+|   |                  TAURI WEBVIEW UI                    |   |
+|   |                                                      |   |
+|   |  +------------------------------------------------+  |   |
+|   |  | RAW VSCODE WORKBENCH UI                        |  |   |
+|   |  | (Compiled directly from original source)       |  |   |
+|   |  | served via in-process vscode-file:// protocol  |  |   |
+|   |  +------------------------------------------------+  |   |
+|   |                           ^                          |   |
+|   |                           | Extracted Interfaces     |   |
+|   |  +------------------------------------------------+  |   |
+|   |  | THE WIND SHIM LAYER (preload, doc-start)       |  |   |
+|   |  | window.vscode.ipcRenderer / process / context  |  |   |
+|   |  | -> forwarded to Rust via Tauri invoke() with   |  |   |
+|   |  |    the original `vscode:` channel names        |  |   |
+|   |  +------------------------------------------------+  |   |
+|   +---------------------------+--------------------------+   |
+|                               | Tauri IPC (JSON + base64    |
+|                               | binary frames)              |
+|   +------------------------------------------------------+   |
+|   |            THE MOUNTAIN BACKEND (Rust Core)          |   |
+|   |  (Implements the exact Node IPC APIs in native Rust) |   |
+|   |  - vscode:hello / vscode:message protocol server     |   |
+|   |  - nativeHost / storage / logger / profiles / ...    |   |
+|   |  - Native Terminal PTY      (portable-pty)           |   |
+|   |  - High-speed FS + watching (notify)                 |   |
+|   |  - Credential storage       (keyring)                |   |
+|   +------------------------------------------------------+   |
+|                               ^ stdio / JSON-RPC             |
+|   +------------------------------------------------------+   |
+|   |  EXTENSION HOST: Node.js SIDECAR                     |   |
+|   |  - Bundled node.exe binary in src-tauri/binaries/    |   |
+|   |  - Original VS Code extension host code              |   |
+|   |  - Talks to Mountain over local gRPC/WebSocket       |   |
+|   |    managed by Rust (Phase 7)                         |   |
+|   +------------------------------------------------------+   |
++--------------------------------------------------------------+
 ```
+
+### Repository mapping (one repo, one branch)
+
+The "forked vanilla workbench + shims + backend" monorepo layout maps onto
+this repository (AGENTS.md constraint 1: single `tauri-rewrite` branch, the
+upstream tree stays pristine and in-tree instead of a submodule):
+
+| Blueprint directory | This repository |
+| --- | --- |
+| `ui-workbench/` (vendored upstream) | the original VS Code tree at repo root (`src/vs/**`, `build/**`, compiled `out/`) — never modified by us |
+| `src-shims/` (Wind) | `src-tauri/src/shim.js` (preload) + `src-tauri/src/config.rs` (window-config handshake) |
+| `src-tauri/` (Mountain) | `src-tauri/src/{ipc,protocol,logger,util,config}.rs` + the growing channel services |
+
+### Minutes-to-Update: consuming upstream VS Code releases
+
+Because all custom code lives in the Wind and Mountain layers (plus `.github/`
+CI), the thousands of workbench files are never touched. When a massive new
+VS Code release drops, the update procedure is mechanical:
+
+1. `git checkout main && git fetch upstream && git merge <upstream release tag>`
+   (the vendored tree = upstream; our branch only carries `src-tauri/`,
+   `compat/`, `build/ipc-contract/`, `ROADMAP.md`, `AGENTS.md`, CI files).
+2. `git checkout tauri-rewrite && git merge main` — resolve conflicts only in
+   the (rare) places where upstream changed an IPC surface we shim.
+3. Re-run the IPC contract extractor (`node build/ipc-contract/extract-ipc-contract.mjs`)
+   — it diffs the freshly scanned contract against `compat/ipc-contract.json`
+   and reports exactly which channels/methods the new workbench expects.
+4. Update any drifted Mountain channel implementations it flags.
+5. `tauri build` — the brand-new workbench wraps around the intact shim stack.
+
+The contract file is therefore the upgrade tripwire: CI fails when the
+renderer's IPC surface drifts from what the Rust backend knows about.
+
+### Window chrome parity (frameless + custom titlebar)
+
+- Frameless window (`decorations: false`) with the workbench's own custom
+  titlebar layout — exactly the VS Code default Windows experience.
+- Drag regions: the shim mirrors Electron's `-webkit-app-region: drag` on
+  `.titlebar-drag-region` (mousedown → Tauri `startDragging`, double click →
+  toggle maximize) — `data-tauri-drag-region` semantics.
+- Native minimize/maximize/close buttons are injected into the workbench's
+  `.window-controls-container` (the DOM shape the original CSS already styles).
+- Platform vibrancy/acrylic: optional `tauri-plugin-vibrancy` integration for
+  the titlebar and background blur — Phase 11 polish, only if the original
+  look stays pixel-identical.
 
 Node is temporarily kept for extension compatibility. It is not Electron.
 
@@ -115,45 +193,66 @@ Open the existing VS Code workbench UI inside a Tauri window without replacing f
 
 ## Phase 2: IPC Contract Extraction
 
-### Status: ⬜ Not started
+### Status: 🟦 In progress
 
 ### Goal
 
 Catalog every Electron main/renderer IPC surface before changing it.
 
+The contract has two halves, both captured by the extractor script
+(`build/ipc-contract/extract-ipc-contract.mjs`):
+
+1. **Plain `vscode:` ipcRenderer channels** — `validatedIpcMain.handle/on` in
+   electron-main, `ipcRenderer.send/invoke/on` in the preload/renderer.
+2. **Main-process message protocol channels** (the `vscode:hello` /
+   `vscode:message` binary protocol the Wind shim bridges into Rust) —
+   every `registerChannel('<name>', ...)` on the main/shared-process side
+   paired with every `getChannel('<name>')` on the renderer side, plus the
+   command/event surface each channel serves (explicit `IServerChannel`
+   switch statements, or `ProxyChannel.fromService` over a service interface
+   — e.g. `nativeHost` exposes the full `INativeHostService` method list).
+
 ### Tasks
 
-- [ ] Scan original source for:
-  - [ ] `ipcMain.handle`
-  - [ ] `ipcMain.on`
-  - [ ] `ipcRenderer.invoke`
-  - [ ] `ipcRenderer.send`
-  - [ ] `webContents.send`
-- [ ] Create `compat/ipc-contract.json`
+- [x] Scan original source for:
+  - [x] `ipcMain.handle` / `ipcMain.on` (via `validatedIpcMain` wrapper)
+  - [x] `ipcRenderer.invoke` / `ipcRenderer.send` (preload + renderer)
+  - [x] `webContents.send` (main → renderer push channels)
+  - [x] `registerChannel` / `getChannel` (protocol service channels, including
+        constant-named channels like `localFilesystem`, `meteredConnection`)
+- [x] Create `compat/ipc-contract.json` (machine-readable, grouped, with
+      producer/consumer file+line references)
+- [x] Create `compat/ipc-contract.md` (human-readable summary tables)
+- [x] Extract the `nativeHost` / `userDataProfiles` / `keyboardLayout`
+      ProxyChannel service interfaces into explicit command lists
 - [ ] Group services into:
-  - [ ] Window
-  - [ ] Dialog
-  - [ ] Menu
-  - [ ] Clipboard
+  - [x] Window / nativeHost
+  - [x] Dialog (nativeHost `pickFileAndOpen` / `showOpenDialog` / ...)
+  - [ ] Clipboard (nativeHost read/write clipboard)
   - [ ] Storage
-  - [ ] Files
-  - [ ] Terminal
+  - [ ] Files (localFilesystem provider channel)
+  - [ ] Terminal (pty host channels)
   - [ ] Search
   - [ ] Process/tasks
-  - [ ] Extensions
+  - [ ] Extensions (extension host + gallery channels)
   - [ ] Update
+- [x] Add contract drift check to CI (fails when the scanned surface changes
+      without the contract being regenerated — the upstream-update tripwire)
+- [x] Add Mountain coverage report to the extractor output (which channels
+      Rust already answers vs. rejects) — `compat/ipc-contract.md`
 - [ ] Add contract tests for each group
 
 ### Acceptance
 
-- [ ] IPC contract checked into repo
-- [ ] Contract tests run in CI
+- [x] IPC contract checked into repo (`compat/ipc-contract.json`)
+- [x] Contract extraction runs in CI (drift check)
+- [ ] Contract tests run in CI for each channel group
 
 ---
 
 ## Phase 3: Window, Dialog, Clipboard, and Storage
 
-### Status: ⬜ Not started
+### Status: 🟦 In progress
 
 ### Goal
 
@@ -165,8 +264,24 @@ Replace Electron main process basics with Tauri/Rust services.
 - [ ] Implement native dialog service
 - [ ] Implement clipboard service
 - [ ] Implement storage/settings persistence
-- [ ] Expose through Tauri IPC with the same channel names
-- [ ] Keep old Electron implementation until tests pass
+  - [x] `storage` protocol channel (getItems / updateItems / getValue /
+        compareAndSwap / optimize / isUsed / onDidChangeStorage) backed by a
+        Rust JSON-file KV store per scope (application / application-shared /
+        profile / workspace) — `src-tauri/src/storage_channel.rs`
+  - [x] `logger` protocol channel (createLogger / log / consoleLog /
+        registerLogger / deregisterLogger / setLogLevel / setVisibility /
+        getRegisteredLoggers + change events) writing real log files under
+        the logs dir — `src-tauri/src/logger_channel.rs`
+  - [x] `userDataProfiles` protocol channel (profile CRUD + onDidChangeProfiles)
+        over a persistent `profiles.json` — `src-tauri/src/profiles_channel.rs`
+- [x] Implement `keyboardLayout` protocol channel (getKeyboardLayoutData with
+      a real US-layout Windows mapping + onDidChangeKeyboardLayout event) —
+      `src-tauri/src/keyboard_channel.rs`
+- [ ] Credential storage: replace `keytar`-style secret storage with the Rust
+      `keyring` crate behind the `encryption`/secret channels (Windows
+      Credential Manager under the hood)
+- [x] Expose through Tauri IPC with the same channel names
+- [x] Keep old Electron implementation until tests pass (Electron tree untouched)
 
 ### Acceptance
 
@@ -177,9 +292,9 @@ Replace Electron main process basics with Tauri/Rust services.
 
 ---
 
-## Phase 4: File System Service
+## Phase 4: File System Service (Mountain: FS)
 
-### Status: ⬜ Not started
+### Status: 🟦 In progress
 
 ### Goal
 
@@ -187,11 +302,22 @@ Replace Electron file service with Rust file service.
 
 ### Tasks
 
-- [ ] Implement read/write/create/delete/rename/copy
-- [ ] Implement file watching with Rust `notify`
+- [x] Implement the `localFilesystem` provider channel (DiskFileSystemProviderChannel
+      command surface, extracted in the Phase 2 contract) natively in Rust —
+      `src-tauri/src/fs_channel.rs`: stat / readdir / readFile / writeFile /
+      mkdir / delete / rename / copy / cloneFile / realpath / open-read-write-close
+      (fd streams) / watch-unwatch, with binary `VSBuffer` frames lifted through
+      the IPC codec (ipc.rs tag-3 bridge) and FileSystemError-shaped rejections
+      (FileNotFound / NoPermissions / FileExists)
+- [x] Implement read/write/create/delete/rename/copy
+- [x] Atomic writes (temp file + rename, same guarantee SQLite gave Electron)
+- [x] fd-based stream IO for large files (open / read / write / close)
+- [ ] Implement file watching with Rust `notify` (replaces `@parcel/watcher` /
+      win32 `ReadDirectoryChangesW` usage — VS Code watcher semantics preserved:
+      recursive, ignore rules, batching). Watch sessions are already registered
+      with stable ids and correct unwatch; the `fileChange` event delivery is
+      the missing piece
 - [ ] Match VS Code watcher behavior
-- [ ] Add support for atomic writes
-- [ ] Add support for large files
 - [ ] Add encoding and BOM handling
 - [ ] Add workspace folder APIs
 - [ ] Add search file traversal hooks
@@ -205,7 +331,7 @@ Replace Electron file service with Rust file service.
 
 ---
 
-## Phase 5: Terminal Service
+## Phase 5: Terminal Service (Mountain: PTY)
 
 ### Status: ⬜ Not started
 
@@ -215,7 +341,9 @@ Replace Electron/node-pty terminal backend with Rust PTY.
 
 ### Tasks
 
-- [ ] Implement PTY service with `portable-pty`
+- [ ] Implement PTY service with the Rust `portable-pty` crate (ConPTY on Windows)
+      as a Tauri sidecar-free native service; data streams flow back to xterm.js
+      through the Wind shim's `vscode:message` protocol frames
 - [ ] Spawn default shell on Windows
 - [ ] Support write, read, resize, kill, exit
 - [ ] Integrate xterm.js renderer IPC
@@ -258,7 +386,7 @@ Replace ripgrep/process backend with Rust equivalents.
 
 ---
 
-## Phase 7: Extension Host Integration
+## Phase 7: Extension Host Integration (Mountain: Sidecar)
 
 ### Status: ⬜ Not started
 
@@ -269,8 +397,14 @@ Preserve extension host while replacing the Electron extension main bridge.
 ### Tasks
 
 - [ ] Keep original VS Code extension host as Node.js sidecar
-- [ ] Bundle Node runtime sidecar if needed
-- [ ] Replace Electron IPC transport with stdio or JSON-RPC
+- [ ] Bundle a pre-compiled Node.js binary into `src-tauri/binaries/` and
+      register it as a Tauri sidecar (`externalBin` in tauri.conf.json)
+- [ ] Spin up the sidecar at app boot from Rust; the extension host process
+      is managed by the Mountain backend
+- [ ] Replace Electron IPC transport (MessagePort-based
+      `vscode:createPtyServiceMessageChannel` style handshakes) with stdio or a
+      local gRPC/WebSocket channel managed by Rust — the Wind shim's
+      `ipcMessagePort.acquire` maps onto it
 - [ ] Implement extension management in Rust:
   - [ ] Discover installed extensions
   - [ ] Read `package.json`
