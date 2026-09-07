@@ -139,7 +139,7 @@ pub fn serve(app: &tauri::AppHandle, request: Request<Vec<u8>>) -> Response<Vec<
     match std::fs::read(&target) {
         Ok(bytes) => {
             trace_request(&method, &raw_path, 200);
-            file_response(&target, bytes)
+            file_response(&target, product_mode_boot_bytes(&mapped, bytes))
         }
         Err(err) => {
             trace_request(&method, &raw_path, 500);
@@ -147,6 +147,43 @@ pub fn serve(app: &tauri::AppHandle, request: Request<Vec<u8>>) -> Response<Vec<
             text_response(StatusCode::INTERNAL_SERVER_ERROR, "read error")
         }
     }
+}
+
+/// Product-mode transition for the renderer environment.
+///
+/// The dev-relative-import boot the Wind shim relies on requires
+/// `process.env.VSCODE_DEV` (workbench.ts picks the relative workbench
+/// import only when it is set). But that flag ALSO makes the renderer act
+/// like a source checkout — `environmentService.isBuilt === false` — which
+/// turns on dev-only behavior the product shell must not show:
+/// `.build/builtInExtensions` scanning, dev console log forwarding, dev
+/// language assertions, ... (see src/vs/platform/environment/common/
+/// environmentService.ts: `get isBuilt() { return !env['VSCODE_DEV']; }`).
+///
+/// ESM evaluation order gives us the exact right window for the flip: the
+/// workbench entry module (`out/vs/workbench/workbench.desktop.main.js`)
+/// consists of static imports only, so its own body evaluates AFTER its
+/// whole dependency graph (modules like product.ts, which may read
+/// VSCODE_DEV for cosmetic dev markers) but BEFORE `DesktopMain.open()`
+/// starts the service graph — and every `isBuilt` consumer (extension
+/// scanner, language service, log service, tree-sitter, ...) is
+/// constructed during open(). Prepending this statement to the entry
+/// module's served bytes therefore switches the renderer into product
+/// mode precisely between module load and service instantiation.
+///
+/// Known trade-off: product.ts evaluates earlier in the graph and appends
+/// the " Dev" suffix to the product names — cosmetic, tracked in ROADMAP.md
+/// (long-term fix: serve the real `vscode-file://vscode-app/...` URL form so
+/// the production import branch works without VSCODE_DEV at all).
+fn product_mode_boot_bytes(mapped: &str, bytes: Vec<u8>) -> Vec<u8> {
+    if !mapped.eq_ignore_ascii_case("out/vs/workbench/workbench.desktop.main.js") {
+        return bytes;
+    }
+    const PREFIX: &str = "/* vstauri: product-mode transition — see src-tauri/src/protocol.rs */\ntry { delete globalThis.vscode.process.env.VSCODE_DEV; } catch (e) {}\n";
+    let mut out = Vec::with_capacity(PREFIX.len() + bytes.len());
+    out.extend_from_slice(PREFIX.as_bytes());
+    out.extend_from_slice(&bytes);
+    out
 }
 
 /// Map a decoded request path onto a path relative to the client root.

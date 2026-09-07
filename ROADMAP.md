@@ -179,6 +179,9 @@ Open the existing VS Code workbench UI inside a Tauri window without replacing f
   - [x] Main-process IPC protocol implemented natively: `vscode:hello` → Initialize frame, `vscode:message` binary frames (base64 bridge, codec mirrored from ipc.ts and round-trip tested), channel router with `nativeHost` window operations; unregistered channels reject like Electron's pending-request timeout and are logged for Phase 2.
   - [x] Custom-titlebar parity: frameless window (`decorations: false`), drag region + dblclick-maximize on `.titlebar-drag-region`, injected `.window-icon` min/max/close buttons into `.window-controls-container`, WebView2 default context menu suppressed globally.
   - [x] Full request trace logging in the protocol handler (first 1000 requests per run) + renderer error forwarding — the remote-debugging loop for the next iterations.
+  - [x] Blank-screen root cause chain identified from a user runtime log: the workbench crashed in `Workbench.restoreFontInfo` (`TypeError: Cannot read properties of undefined (reading 'fontFamily')`) because `WorkspaceService.initialize()` failed silently (missing `localFilesystem` channel in that build → no configuration model → `getValue('editor') === undefined`). The Phase 4 fs/storage/logger/profiles channels close that chain; the remaining boot-channel gaps (`update:_getInitialState`, `meteredConnection`, `nativeManagedSettings`) are now answered too.
+  - [x] Renderer `Initialize` (200) echo handled: the renderer's `IPCClient` also constructs a `ChannelServer` whose constructor sends its own `Initialize` frame upstream (bidirectional ipc.electron protocol); Electron main ignores it, the Rust router now does too instead of warning.
+  - [x] Product-mode env transition: `VSCODE_DEV` is boot-only now. protocol.rs prepends a transition statement to the served `workbench.desktop.main.js` that deletes it after the module graph evaluated (before `DesktopMain.open()`), so `environmentService.isBuilt` reports a built product — no `.build/builtInExtensions` dev scans, no dev console forwarding. Known cosmetic gap: `product.ts` evaluates earlier in the graph and appends the " Dev" product-name suffix (fix: serve the real `vscode-file://vscode-app/...` URL form from wry so the production import branch works without VSCODE_DEV at all).
 - [x] Keep Electron app still buildable in parallel (Electron tree untouched)
 
 ### Acceptance
@@ -355,6 +358,21 @@ Replace Electron file service with Rust file service.
       exclude-driven pruning incl. the watched directory itself)
 - [ ] Re-arm watchers when the watched directory is deleted and recreated
       (upstream parcel watcher behavior — tracked for the next round)
+- [x] Ship the built-in (system) extensions in the client bundle
+      (`extensions/`, `*-tests` fixtures excluded): 61 of 96 are data-only
+      (theme-defaults, language grammars, keymaps) and work immediately
+      through the localFilesystem channel — they give the workbench its
+      default themes and colors. Code extensions are scanned and listed but
+      stay inactive until the extension host lands (Phase 7). Verified by
+      the CI bundle assertions + `--vstauri-smoke` (theme-defaults
+      dark_plus.json).
+- [ ] OPEN QUESTION (watcher routing): the desktop renderer's *recursive*
+      watcher goes through `UniversalWatcherClient` →
+      `utilityProcessWorker.createWorker({moduleId: 'vs/platform/files/node/watcher/watcherMain'})`
+      (a utility process in Electron). Our notify-based watcher currently
+      answers the `localFilesystem` channel's own watch/unwatch surface.
+      First Windows runtime logs from the new build must show which path
+      the FileService actually takes before more watcher work is invested.
 - [ ] Add encoding and BOM handling
 - [ ] Add workspace folder APIs
 - [ ] Add search file traversal hooks

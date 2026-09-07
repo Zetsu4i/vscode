@@ -8,7 +8,7 @@ Regenerate with `node build/ipc-contract/extract-ipc-contract.mjs` and commit th
 - Files scanned: **8824**
 - Plain `vscode:` channels (product surface): **49** (+2 test-only)
 - Protocol service channels (product surface): **56** (+5 test-only)
-- Mountain channels answered in Rust: **8**
+- Mountain channels answered in Rust: **11**
 - Dynamic channel names (need manual tracing): **113**
 
 ## Plain channels (renderer <-> main, `ipcRenderer` surface bridged by the Wind shim)
@@ -94,9 +94,9 @@ Regenerate with `node build/ipc-contract/extract-ipc-contract.mjs` and commit th
 | `mcpGalleryManifest` | yes | yes | not-implemented | unknown (dynamic) |
 | `mcpManagement` | yes | yes | not-implemented | unknown (dynamic) |
 | `menubar` | yes | no | not-implemented | unknown (dynamic) |
-| `meteredConnection` | yes | yes | not-implemented | unknown (dynamic) |
+| `meteredConnection` | yes | yes | implemented(*) | unknown (dynamic) |
 | `nativeHost` | yes | yes | implemented(*) | 104 (ProxyChannel: getWindows, getWindowCount, getActiveWindowId, getActiveWindowPosition, getNativeWindowHandle, openWindow, ...) |
-| `nativeManagedSettings` | yes | yes | not-implemented | unknown (dynamic) |
+| `nativeManagedSettings` | yes | yes | implemented(1 commands) | unknown (dynamic) |
 | `playwright` | yes | no | not-implemented | unknown (dynamic) |
 | `policy` | yes | yes | not-implemented | 2 (server switch) |
 | `process` | yes | no | not-implemented | 4 (ProxyChannel: resolveProcesses, getSystemStatus, getSystemInfo, getPerformanceInfo) |
@@ -110,7 +110,7 @@ Regenerate with `node build/ipc-contract/extract-ipc-contract.mjs` and commit th
 | `storage` | yes | yes | implemented(*) | 8 (server switch) |
 | `telemetry` | yes | no | not-implemented | unknown (dynamic) |
 | `telemetryAppender` | yes | yes | not-implemented | unknown (dynamic) |
-| `update` | yes | no | not-implemented | 7 (ProxyChannel: checkForUpdates, downloadUpdate, applyUpdate, quitAndInstall, isLatestVersion, _applySpecificUpdate, ...) |
+| `update` | yes | no | implemented(1 commands) | 7 (ProxyChannel: checkForUpdates, downloadUpdate, applyUpdate, quitAndInstall, isLatestVersion, _applySpecificUpdate, ...) |
 | `url` | yes | yes | not-implemented | 3 (ProxyChannel: create, open, registerHandler) |
 | `urlHandler` | yes | yes | not-implemented | unknown (dynamic) |
 | `userDataAutoSync` | yes | yes | not-implemented | unknown (dynamic) |
@@ -135,8 +135,11 @@ Channels the Rust backend answers today (whole-channel `*` handlers or per-comma
 - `localFilesystem`
 - `localPty`
 - `logger`
+- `meteredConnection`
 - `nativeHost`
+- `nativeManagedSettings`
 - `storage`
+- `update`
 - `userDataProfiles`
 
 ## ProxyChannel service surfaces

@@ -262,6 +262,12 @@
   // path — `_VSCODE_USE_RELATIVE_IMPORTS` + relative workbench import — which
   // is the only import form that resolves through this document's origin.
   // See workbench.ts line ~517 and shim header notes.
+  //
+  // LIFECYCLE: VSCODE_DEV is BOOT-ONLY. protocol.rs prepends a transition
+  // statement to the served bytes of out/vs/workbench/workbench.desktop.main.js
+  // that deletes it after the module graph evaluated (before DesktopMain.open)
+  // so `environmentService.isBuilt` reports a built product afterwards. Do not
+  // add new code that depends on VSCODE_DEV surviving past boot.
   var env = { VSCODE_DEV: '1' };
 
   var processObj = {

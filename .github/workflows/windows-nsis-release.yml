@@ -229,6 +229,20 @@ jobs:
           # Static resources referenced by the workbench.
           cp -r resources staging/resources
 
+          # Built-in (system) extensions — the "app extensions" Electron ships
+          # under resources/app/extensions. Data-only ones (theme-defaults,
+          # language grammars, keymaps: 61 of 96) work through the
+          # localFilesystem channel immediately and give the workbench its
+          # default themes/colors; code extensions are scanned and listed but
+          # stay inactive until the extension host lands (Phase 7). Test
+          # fixture extensions (*-tests) are excluded like the product build.
+          mkdir -p staging/extensions
+          for ext_dir in extensions/*/; do
+            name=$(basename "$ext_dir")
+            case "$name" in *-tests|*-test) continue ;; esac
+            cp -r "$ext_dir" "staging/extensions/$name"
+          done
+
           # DEV-parity CSS loading: the dev compile does not bundle
           # workbench.desktop.main.css (that is a production-build artifact).
           # Dev mode instead ships configuration.cssModules — the sorted list
@@ -305,7 +319,9 @@ jobs:
             staging/out/vs/base/browser/ui/codicons/codicon/codicon.ttf \
             staging/node_modules/vscode-oniguruma/release/onig.wasm \
             staging/product.json \
-            staging/nls.messages.json; do
+            staging/nls.messages.json \
+            staging/extensions/theme-defaults/package.json \
+            staging/extensions/theme-defaults/themes/dark_plus.json; do
             [ -f "$f" ] || { echo "::error::missing client boot file: $f"; exit 1; }
             echo "ok  $f"
           done
@@ -342,7 +358,8 @@ jobs:
             src-tauri/resources/client/out/vs/code/electron-browser/workbench/workbench.html \
             src-tauri/resources/client/out/vs/workbench/workbench.desktop.main.js \
             src-tauri/resources/client/product.json \
-            src-tauri/resources/client/nls.messages.json; do
+            src-tauri/resources/client/nls.messages.json \
+            src-tauri/resources/client/extensions/theme-defaults/themes/dark_plus.json; do
             [ -f "$f" ] || { echo "::error::client file missing in bundle: $f"; exit 1; }
           done
 

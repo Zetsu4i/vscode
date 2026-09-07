@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-07T17:21:06.448Z",
+  "generatedAt": "2026-09-07T17:39:13.555Z",
   "upstreamVersion": "1.138.0",
   "summary": {
     "filesScanned": 8824,
@@ -8,7 +8,7 @@
     "protocolChannelsProduct": 56,
     "protocolChannelsTestOnly": 5,
     "dynamicChannelCalls": 113,
-    "mountainChannelsImplemented": 8
+    "mountainChannelsImplemented": 11
   },
   "plainChannels": {
     "vscode:accessibilitySupportChanged": {
@@ -1516,7 +1516,7 @@
       "registered": true,
       "consumed": true,
       "testOnly": false,
-      "mountain": "not-implemented",
+      "mountain": "implemented(*)",
       "refs": [
         {
           "file": "src/vs/code/electron-main/app.ts",
@@ -1710,7 +1710,7 @@
       "registered": true,
       "consumed": true,
       "testOnly": false,
-      "mountain": "not-implemented",
+      "mountain": "implemented(1 commands)",
       "refs": [
         {
           "file": "src/vs/code/electron-main/app.ts",
@@ -2129,7 +2129,7 @@
       "registered": true,
       "consumed": false,
       "testOnly": false,
-      "mountain": "not-implemented",
+      "mountain": "implemented(1 commands)",
       "refs": [
         {
           "file": "src/vs/code/electron-main/app.ts",
@@ -2509,8 +2509,11 @@
       "localFilesystem",
       "localPty",
       "logger",
+      "meteredConnection",
       "nativeHost",
+      "nativeManagedSettings",
       "storage",
+      "update",
       "userDataProfiles"
     ],
     "note": "Parsed from match arms in src-tauri/src/*.rs; \"*\" = whole-channel handler."

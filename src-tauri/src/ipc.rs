@@ -377,6 +377,15 @@ fn on_protocol_frame(frame_b64: &str) {
                 guard.remove(&id);
             }
         }
+        200..=206 => {
+            // Response-type frames arriving FROM the renderer are expected:
+            // the renderer's IPCClient also constructs a ChannelServer over
+            // the same bidirectional protocol (ipc.electron Protocol), and
+            // that constructor immediately sends its own Initialize (200)
+            // frame upstream. Electron main feeds these frames into its
+            // ChannelClient, which handles/ignores them silently — match
+            // that behavior (no warning).
+        }
         other => {
             crate::logger::log_app(
                 "warn",
@@ -457,6 +466,25 @@ fn route_channel_request(
         }
         ("launch", "getOS") => Ok(json!("Windows")),
         ("launch", "getOSRelease") => Ok(json!("10.0.0")),
+
+        // update: IUpdateService. The shell does not implement VS Code's
+        // native updater (NSIS releases are produced by CI instead), so
+        // report the same Disabled/NotBuilt state the win32 update service
+        // returns for builds without update support — the workbench then
+        // hides the update UI instead of erroring on _getInitialState.
+        ("update", "_getInitialState") => Ok(json!({
+            "type": "disabled",
+            "reason": 0 // DisablementReason.NotBuilt
+        })),
+
+        // meteredConnection: desktop sessions are never metered (Electron
+        // parity — the signal exists for browser sessions only).
+        ("meteredConnection", _) => Ok(Value::Null),
+
+        // nativeManagedSettings: no enterprise managed-settings support in
+        // the shell — NullNativeManagedSettingsService parity (empty data).
+        ("nativeManagedSettings", "initialize")
+        | ("nativeManagedSettings", "updatePolicyDefinitions") => Ok(json!({})),
 
         // Everything else is a faithful "channel not registered" rejection —
         // same outcome as Electron's 1s pending-request timeout, and the call

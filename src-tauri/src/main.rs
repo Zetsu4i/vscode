@@ -48,6 +48,11 @@ const SMOKE_FILES: &[&str] = &[
     "node_modules/vscode-oniguruma/release/onig.wasm",
     "product.json",
     "nls.messages.json",
+    // Built-in (system) extensions: theme-defaults is pure data and gives the
+    // workbench its default themes/grammars through the localFilesystem
+    // channel — without it the workbench renders unthemed.
+    "extensions/theme-defaults/package.json",
+    "extensions/theme-defaults/themes/dark_plus.json",
 ];
 
 fn main() {
