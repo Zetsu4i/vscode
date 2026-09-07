@@ -236,12 +236,29 @@ jobs:
           # default themes/colors; code extensions are scanned and listed but
           # stay inactive until the extension host lands (Phase 7). Test
           # fixture extensions (*-tests) are excluded like the product build.
+          # copilot is excluded too: its dist/ is gitignored (built by
+          # compile-copilot, which this pipeline does not run), so it is
+          # ~62MB of dead weight until the Phase 7 sidecar ships it.
+          #
+          # CRITICAL: per-extension node_modules must NOT be staged. The
+          # node_modules cache (listNodeModules.ts) includes every
+          # extensions/*/node_modules in the repo (~130k files / ~800MB) —
+          # copying them into the bundle ballooned the artifact to 1GB and
+          # made the artifact download flaky. They are build-time dev
+          # dependencies; nothing reads them until Phase 7 anyway.
+          shopt -s dotglob nullglob
           mkdir -p staging/extensions
           for ext_dir in extensions/*/; do
             name=$(basename "$ext_dir")
-            case "$name" in *-tests|*-test) continue ;; esac
-            cp -r "$ext_dir" "staging/extensions/$name"
+            case "$name" in *-tests|*-test|copilot|node_modules) continue ;; esac
+            mkdir -p "staging/extensions/$name"
+            for entry in "$ext_dir"*; do
+              if [ "$(basename "$entry")" != "node_modules" ]; then
+                cp -r "$entry" "staging/extensions/$name/"
+              fi
+            done
           done
+          shopt -u dotglob nullglob
 
           # DEV-parity CSS loading: the dev compile does not bundle
           # workbench.desktop.main.css (that is a production-build artifact).

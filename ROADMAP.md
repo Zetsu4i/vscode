@@ -359,11 +359,14 @@ Replace Electron file service with Rust file service.
 - [ ] Re-arm watchers when the watched directory is deleted and recreated
       (upstream parcel watcher behavior — tracked for the next round)
 - [x] Ship the built-in (system) extensions in the client bundle
-      (`extensions/`, `*-tests` fixtures excluded): 61 of 96 are data-only
+      (`extensions/`, `*-tests` fixtures excluded, `copilot` excluded until
+      Phase 7 — its `dist/` is gitignored and only `compile-copilot` can
+      produce it): 61 of 96 are data-only
       (theme-defaults, language grammars, keymaps) and work immediately
       through the localFilesystem channel — they give the workbench its
       default themes and colors. Code extensions are scanned and listed but
-      stay inactive until the extension host lands (Phase 7). Verified by
+      stay inactive until the extension host lands (Phase 7; the sidecar
+      round must also run compile-copilot and ship its dist/). Verified by
       the CI bundle assertions + `--vstauri-smoke` (theme-defaults
       dark_plus.json).
 - [ ] OPEN QUESTION (watcher routing): the desktop renderer's *recursive*
