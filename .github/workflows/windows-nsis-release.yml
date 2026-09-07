@@ -393,8 +393,12 @@ jobs:
       # Mountain channel services (storage/logger/profiles/keyboardLayout/
       # nativeHost): the contract-shaped unit tests from the Phase 2/3
       # implementation round. Runs on the host before the bundle build.
+      # Serial + nocapture: a hang prints the test name that blocked (the
+      # suite is small, serial costs seconds). Hard timeout so a hang can
+      # never burn the whole job.
       - name: Rust unit tests (Mountain channels + IPC codec)
-        run: cargo test --manifest-path src-tauri/Cargo.toml
+        run: cargo test --manifest-path src-tauri/Cargo.toml -- --test-threads=1 --nocapture
+        timeout-minutes: 20
 
       - name: Cache tauri-cli binary
         id: tacli
