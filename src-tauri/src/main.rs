@@ -53,6 +53,9 @@ const SMOKE_FILES: &[&str] = &[
     // channel — without it the workbench renders unthemed.
     "extensions/theme-defaults/package.json",
     "extensions/theme-defaults/themes/dark_plus.json",
+    // Terminal shell-integration script (injected into pwsh/bash launches,
+    // see terminal_channel::shell_integration_injection).
+    "out/vs/workbench/contrib/terminal/common/scripts/shellIntegration.ps1",
 ];
 
 fn main() {

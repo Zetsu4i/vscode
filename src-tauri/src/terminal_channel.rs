@@ -34,10 +34,16 @@
 //!   onDidChangeProperty / onProcessReplay / onProcessOrphanQuestion /
 //!   onDidRequestDetach — reserved, fired when the features land.
 //!
+//! Shell-integration script injection: getShellIntegrationInjection
+//! (terminalEnvironment.ts) is mirrored in shell_integration_injection()
+//! below — replace-args injection for pwsh/powershell/bash.exe on Windows
+//! (bash/zsh/pwsh/fish on other platforms for dev parity) plus the
+//! VSCODE_* env mixin; the injected args come back through `start` as
+//! ITerminalLaunchResult.injectedArgs (terminal tooltip parity).
+//!
 //! Not yet implemented (tracked in ROADMAP.md Phase 5):
 //!   - persistent terminal state across app restarts
 //!     (serializeTerminalState/reviveTerminalProcesses are in-memory stubs)
-//!   - shell-integration script injection (injectedArgs: [])
 //!   - dynamic cwd tracking via OSC 633/9;9 (xterm.js title/OSC parsing
 //!     already runs renderer-side; cwd refresh stays initial).
 
@@ -47,7 +53,7 @@ use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicI64, Ordering};
-use std::sync::{LazyLock, Mutex};
+use std::sync::{LazyLock, Mutex, OnceLock};
 
 const CHANNEL: &str = "localPty";
 
@@ -76,6 +82,9 @@ struct PtyProcess {
     is_orphan: bool,
     attached: bool,
     has_child_processes: bool,
+    /// Shell-integration args injected at spawn (empty when none) — served
+    /// by `start` as ITerminalLaunchResult.injectedArgs.
+    injected_args: Vec<String>,
 }
 
 impl PtyProcess {
@@ -112,6 +121,41 @@ static PTY_PROCS: LazyLock<Mutex<HashMap<i64, PtyProcess>>> =
 static LAYOUT_INFO: LazyLock<Mutex<HashMap<String, Value>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
+/// Shell-integration scripts directory (`out/vs/workbench/contrib/terminal/
+/// common/scripts` in the client bundle), resolved once by init() — mirrors
+/// `FileAccess.asFileUri('vs/workbench/contrib/terminal/common/scripts')
+/// .fsPath` in terminalEnvironment.ts.
+static SCRIPTS_DIR: OnceLock<PathBuf> = OnceLock::new();
+
+/// product.json `quality` ("stable" | undefined) — VSCODE_STABLE env mixin.
+static PRODUCT_QUALITY: OnceLock<String> = OnceLock::new();
+
+/// Resolve the shell-integration assets from the client bundle. Called from
+/// config.rs build() once the client root is known (before any pty spawns).
+pub fn init(app: &tauri::AppHandle) {
+    let root = crate::protocol::client_root(app);
+    let scripts = root.join("out/vs/workbench/contrib/terminal/common/scripts");
+    if scripts.is_dir() {
+        let _ = SCRIPTS_DIR.set(scripts);
+    } else {
+        crate::logger::log_app(
+            "warn",
+            "localPty: shell-integration scripts missing from the client bundle; shell integration stays off",
+        );
+    }
+    let quality = std::fs::read_to_string(root.join("product.json"))
+        .ok()
+        .and_then(|text| serde_json::from_str::<Value>(&text).ok())
+        .and_then(|product| {
+            product
+                .get("quality")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        })
+        .unwrap_or_default();
+    let _ = PRODUCT_QUALITY.set(quality);
+}
+
 /// Handle one `localPty` channel request.
 pub fn handle(command: &str, arg: &Value) -> Result<Value, String> {
     let args = arg.as_array().cloned().unwrap_or_default();
@@ -121,9 +165,20 @@ pub fn handle(command: &str, arg: &Value) -> Result<Value, String> {
         // ---- process lifecycle ----
         "createProcess" => create_process(&args),
         "start" => {
-            // ITerminalLaunchResult: the injected args we (don't) add.
-            // Shell-integration injection is later Phase 5 work.
-            Ok(json!({ "injectedArgs": [] }))
+            // ITerminalLaunchResult: the shell-integration args injected at
+            // createProcess time (upstream returns undefined when nothing was
+            // injected — the tooltip then falls back to the SLC args).
+            let id = arg0.as_i64().unwrap_or(-1);
+            let injected = PTY_PROCS
+                .lock()
+                .ok()
+                .and_then(|procs| procs.get(&id).map(|p| p.injected_args.clone()))
+                .unwrap_or_default();
+            if injected.is_empty() {
+                Ok(Value::Null)
+            } else {
+                Ok(json!({ "injectedArgs": injected }))
+            }
         }
         "shutdown" => {
             let id = arg0.as_i64().unwrap_or(-1);
@@ -365,6 +420,246 @@ pub fn handle(command: &str, arg: &Value) -> Result<Value, String> {
 // Process creation and lifecycle
 // ---------------------------------------------------------------------------
 
+/// Mirror of getShellIntegrationInjection (terminalEnvironment.ts): decides
+/// whether shell-integration launch args can REPLACE the shell's own args,
+/// and which VSCODE_* env vars to mix in. Returns (newArgs, envMixin) or
+/// None (upstream's failure reasons → no injection, shell still spawns).
+fn shell_integration_injection(
+    executable: &str,
+    slc: &Value,
+    options: &Value,
+) -> Option<(Vec<String>, Map<String, Value>)> {
+    let integration = options.get("shellIntegration").cloned().unwrap_or(Value::Null);
+    // The global setting is disabled
+    if !integration
+        .get("enabled")
+        .and_then(Value::as_bool)
+        .unwrap_or(true)
+    {
+        return None;
+    }
+    // No executable — no way to determine how to inject
+    if executable.is_empty() {
+        return None;
+    }
+    // Feature terminals (tasks, debug) unless explicitly forced
+    if slc.get("isFeatureTerminal").and_then(Value::as_bool).unwrap_or(false)
+        && !slc
+            .get("forceShellIntegration")
+            .and_then(Value::as_bool)
+            .unwrap_or(false)
+    {
+        return None;
+    }
+    // The ignoreShellIntegration flag (eg. relaunching without integration)
+    if slc
+        .get("ignoreShellIntegration")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+    {
+        return None;
+    }
+    // Shell integration requires Windows 10 build 18309+ (ConPTY)
+    if cfg!(windows) && windows_build_number() < 18309 {
+        return None;
+    }
+
+    let scripts = SCRIPTS_DIR.get()?;
+    let dir = scripts.to_string_lossy().to_string();
+    let shell = executable
+        .rsplit(['\\', '/'])
+        .next()
+        .unwrap_or(executable)
+        .to_ascii_lowercase();
+    let original_args = slc_args_vec(slc);
+
+    let mut env_mixin = Map::new();
+    env_mixin.insert("VSCODE_INJECTION".to_string(), json!("1"));
+    if let Some(nonce) = integration.get("nonce").and_then(Value::as_str) {
+        if !nonce.is_empty() {
+            env_mixin.insert("VSCODE_NONCE".to_string(), json!(nonce));
+        }
+    }
+    let stable = if PRODUCT_QUALITY.get().map(String::as_str) == Some("stable") {
+        "1"
+    } else {
+        "0"
+    };
+
+    let new_args: Vec<String> = if cfg!(windows) {
+        if shell == "pwsh.exe" || shell == "powershell.exe" {
+            // The try/catch swallows execution policy errors in the case of
+            // the archive distributable (upstream comment).
+            let template = format!("try {{ . \"{}\\shellIntegration.ps1\" }} catch {{}}", dir);
+            let variant = if original_args.is_empty() || are_pwsh_implied_args(&original_args) {
+                Some(vec!["-noexit".to_string(), "-command".to_string(), template])
+            } else if are_pwsh_login_args(&original_args) {
+                Some(vec![
+                    "-l".to_string(),
+                    "-noexit".to_string(),
+                    "-command".to_string(),
+                    template,
+                ])
+            } else {
+                None // UnsupportedArgs
+            };
+            let variant = variant?;
+            env_mixin.insert(
+                "VSCODE_A11Y_MODE".to_string(),
+                json!(if options
+                    .get("isScreenReaderOptimized")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false)
+                {
+                    "1"
+                } else {
+                    "0"
+                }),
+            );
+            if windows_build_number() >= 22631 {
+                env_mixin.insert(
+                    "VSCODE_SHELL_ENV_REPORTING".to_string(),
+                    json!("PATH,VIRTUAL_ENV,HOME,SHELL,PWD"),
+                );
+            }
+            env_mixin.insert("VSCODE_STABLE".to_string(), json!(stable));
+            variant
+        } else if shell == "bash.exe" {
+            if !original_args.is_empty() && !are_zsh_bash_fish_login_args(&original_args) {
+                return None; // UnsupportedArgs
+            }
+            if !original_args.is_empty() {
+                env_mixin.insert("VSCODE_SHELL_LOGIN".to_string(), json!("1"));
+            }
+            env_mixin.insert("VSCODE_STABLE".to_string(), json!(stable));
+            vec![
+                "--init-file".to_string(),
+                format!("{}/shellIntegration-bash.sh", dir),
+            ]
+        } else {
+            return None; // UnsupportedShell on Windows
+        }
+    } else {
+        match shell.as_str() {
+            "bash" => {
+                if !original_args.is_empty() && !are_zsh_bash_fish_login_args(&original_args) {
+                    return None;
+                }
+                if !original_args.is_empty() {
+                    env_mixin.insert("VSCODE_SHELL_LOGIN".to_string(), json!("1"));
+                }
+                env_mixin.insert("VSCODE_STABLE".to_string(), json!(stable));
+                vec![
+                    "--init-file".to_string(),
+                    format!("{}/shellIntegration-bash.sh", dir),
+                ]
+            }
+            "pwsh" => {
+                if !(original_args.is_empty() || are_pwsh_implied_args(&original_args))
+                    && !are_pwsh_login_args(&original_args)
+                {
+                    return None;
+                }
+                let login_prefix = if are_pwsh_login_args(&original_args) {
+                    vec!["-l".to_string()]
+                } else {
+                    Vec::new()
+                };
+                env_mixin.insert("VSCODE_A11Y_MODE".to_string(), json!("0"));
+                env_mixin.insert("VSCODE_STABLE".to_string(), json!(stable));
+                let mut out = login_prefix;
+                out.push("-noexit".to_string());
+                out.push("-command".to_string());
+                out.push(format!(". \"{}/shellIntegration.ps1\"", dir));
+                out
+            }
+            "zsh" => {
+                let login = !original_args.is_empty() && are_zsh_bash_fish_login_args(&original_args);
+                if !original_args.is_empty() && !login {
+                    return None;
+                }
+                if login {
+                    vec!["-il".to_string()]
+                } else {
+                    vec!["-i".to_string()]
+                }
+            }
+            "fish" => {
+                if !original_args.is_empty() && !are_zsh_bash_fish_login_args(&original_args) {
+                    return None;
+                }
+                let mut out = Vec::new();
+                if !original_args.is_empty() {
+                    out.push("-l".to_string());
+                }
+                out.push("--init-command".to_string());
+                out.push(format!("source \"{}/shellIntegration.fish\"", dir));
+                out
+            }
+            _ => return None, // UnsupportedShell
+        }
+    };
+
+    if !cfg!(windows) {
+        env_mixin.insert(
+            "VSCODE_SHELL_ENV_REPORTING".to_string(),
+            json!("PATH,VIRTUAL_ENV,HOME,SHELL,PWD"),
+        );
+    }
+
+    Some((new_args, env_mixin))
+}
+
+/// shellLaunchConfig.args as a plain string vec (string | string[] forms).
+fn slc_args_vec(slc: &Value) -> Vec<String> {
+    match slc.get("args") {
+        Some(Value::Array(items)) => items
+            .iter()
+            .filter_map(Value::as_str)
+            .map(str::to_string)
+            .collect(),
+        Some(Value::String(single)) if !single.is_empty() => vec![single.to_string()],
+        _ => Vec::new(),
+    }
+}
+
+const PWSH_LOGIN_ARGS: [&str; 2] = ["-login", "-l"];
+const PWSH_IMPLIED_ARGS: [&str; 2] = ["-nol", "-nologo"];
+const SH_LOGIN_ARGS: [&str; 2] = ["--login", "-l"];
+const SH_INTERACTIVE_ARGS: [&str; 2] = ["-i", "--interactive"];
+
+fn are_pwsh_implied_args(original: &[String]) -> bool {
+    original.is_empty()
+        || (original.len() == 1
+            && PWSH_IMPLIED_ARGS.contains(&original[0].to_ascii_lowercase().as_str()))
+}
+
+fn are_pwsh_login_args(original: &[String]) -> bool {
+    let lowered: Vec<String> = original
+        .iter()
+        .map(|a| a.to_ascii_lowercase())
+        .collect();
+    if lowered.len() == 1 {
+        return PWSH_LOGIN_ARGS.contains(&lowered[0].as_str());
+    }
+    if lowered.len() == 2 {
+        let a = lowered[0].as_str();
+        let b = lowered[1].as_str();
+        return (PWSH_LOGIN_ARGS.contains(&a) || PWSH_LOGIN_ARGS.contains(&b))
+            && (PWSH_IMPLIED_ARGS.contains(&a) || PWSH_IMPLIED_ARGS.contains(&b));
+    }
+    false
+}
+
+fn are_zsh_bash_fish_login_args(original: &[String]) -> bool {
+    let filtered: Vec<String> = original
+        .iter()
+        .filter(|a| !SH_INTERACTIVE_ARGS.contains(&a.to_ascii_lowercase().as_str()))
+        .map(|a| a.to_ascii_lowercase())
+        .collect();
+    filtered.len() == 1 && SH_LOGIN_ARGS.contains(&filtered[0].as_str())
+}
+
 fn create_process(args: &[Value]) -> Result<Value, String> {
     // createProcess(shellLaunchConfig, cwd, cols, rows, unicodeVersion,
     //               env, executableEnv, options, shouldPersist,
@@ -393,19 +688,35 @@ fn create_process(args: &[Value]) -> Result<Value, String> {
         CommandBuilder::new(&executable)
     };
 
-    // shellLaunchConfig.args: string[] | string
-    match slc.get("args") {
-        Some(Value::Array(items)) => {
-            for item in items {
-                if let Some(arg) = item.as_str() {
-                    cmd.arg(arg);
-                }
+    // Shell-integration injection (mirror of getShellIntegrationInjection
+    // in terminalEnvironment.ts): REPLACES the launch args for supported
+    // shells and mixes VSCODE_* env vars into the spawn env. When it does
+    // not apply (setting off, feature terminal, unsupported shell/args) the
+    // original shellLaunchConfig.args run unchanged.
+    let options = args.get(7).cloned().unwrap_or(Value::Null);
+    let injection = shell_integration_injection(&executable, &slc, &options);
+    match &injection {
+        Some((new_args, _)) => {
+            for arg in new_args {
+                cmd.arg(arg);
             }
         }
-        Some(Value::String(single)) if !single.is_empty() => {
-            cmd.arg(single);
+        None => {
+            // shellLaunchConfig.args: string[] | string
+            match slc.get("args") {
+                Some(Value::Array(items)) => {
+                    for item in items {
+                        if let Some(arg) = item.as_str() {
+                            cmd.arg(arg);
+                        }
+                    }
+                }
+                Some(Value::String(single)) if !single.is_empty() => {
+                    cmd.arg(single);
+                }
+                _ => {}
+            }
         }
-        _ => {}
     }
 
     // cwd precedence: shellLaunchConfig.cwd (string | UriComponents) over
@@ -434,6 +745,13 @@ fn create_process(args: &[Value]) -> Result<Value, String> {
     }
     if let Some(env_map) = slc.get("env").and_then(Value::as_object) {
         for (key, value) in env_map {
+            if let Some(value_str) = value.as_str() {
+                cmd.env(key, value_str);
+            }
+        }
+    }
+    if let Some((_, mixin)) = &injection {
+        for (key, value) in mixin {
             if let Some(value_str) = value.as_str() {
                 cmd.env(key, value_str);
             }
@@ -489,6 +807,7 @@ fn create_process(args: &[Value]) -> Result<Value, String> {
                 is_orphan: false,
                 attached: true,
                 has_child_processes: false,
+                injected_args: injection.as_ref().map(|(a, _)| a.clone()).unwrap_or_default(),
             },
         );
     }
@@ -1079,6 +1398,87 @@ mod tests {
     fn unknown_commands_reject_like_upstream() {
         let err = handle("notACommand", &json!([])).expect_err("must reject");
         assert!(err.contains("notACommand"));
+    }
+
+    #[test]
+    fn pwsh_arg_classifiers_match_upstream() {
+        // arePwshImpliedArgs: empty, or a single -nol/-nologo
+        assert!(are_pwsh_implied_args(&[]));
+        assert!(are_pwsh_implied_args(&["-NoLogo".to_string()]));
+        assert!(!are_pwsh_implied_args(&["-command".to_string()]));
+        // arePwshLoginArgs: single login flag, or login+implied pair
+        assert!(are_pwsh_login_args(&["-l".to_string()]));
+        assert!(are_pwsh_login_args(&["-Login".to_string()]));
+        assert!(are_pwsh_login_args(&["-l".to_string(), "-nologo".to_string()]));
+        assert!(!are_pwsh_login_args(&["-command".to_string(), "foo".to_string()]));
+        // login-arg detection strips interactive flags first
+        assert!(are_zsh_bash_fish_login_args(&["-i".to_string(), "-l".to_string()]));
+        assert!(are_zsh_bash_fish_login_args(&["--login".to_string()]));
+        assert!(!are_zsh_bash_fish_login_args(&["-c".to_string()]));
+    }
+
+    #[test]
+    fn shell_integration_injection_gates() {
+        let _ = SCRIPTS_DIR.set(PathBuf::from("C:/fake/out/vs/workbench/contrib/terminal/common/scripts"));
+        let pwsh = "C:\\Program Files\\PowerShell\\7\\pwsh.exe";
+        let options = json!({ "shellIntegration": { "enabled": true } });
+
+        // Setting disabled -> no injection
+        let opts_off = json!({ "shellIntegration": { "enabled": false } });
+        assert!(shell_integration_injection(pwsh, &json!({ "executable": pwsh }), &opts_off).is_none());
+        // Feature terminal without force -> no injection
+        let slc_task = json!({ "executable": pwsh, "isFeatureTerminal": true });
+        assert!(shell_integration_injection(pwsh, &slc_task, &options).is_none());
+        // ignoreShellIntegration -> no injection
+        let slc_ignore = json!({ "executable": pwsh, "ignoreShellIntegration": true });
+        assert!(shell_integration_injection(pwsh, &slc_ignore, &options).is_none());
+    }
+
+    #[test]
+    fn shell_integration_injection_formats_args_and_env() {
+        let _ = SCRIPTS_DIR.set(PathBuf::from("C:/fake/out/vs/workbench/contrib/terminal/common/scripts"));
+        let pwsh = "C:\\Program Files\\PowerShell\\7\\pwsh.exe";
+        let options = json!({ "shellIntegration": { "enabled": true, "nonce": "n-1234" } });
+
+        if cfg!(windows) {
+            let slc = json!({ "executable": pwsh });
+            let (args, env) =
+                shell_integration_injection(pwsh, &slc, &options).expect("pwsh injection");
+            assert_eq!(args[0], "-noexit");
+            assert_eq!(args[1], "-command");
+            assert!(args[2].contains("shellIntegration.ps1"), "got {:?}", args[2]);
+            assert!(args[2].starts_with("try { . \""), "template parity: {:?}", args[2]);
+            assert_eq!(env.get("VSCODE_INJECTION").and_then(Value::as_str), Some("1"));
+            assert_eq!(env.get("VSCODE_NONCE").and_then(Value::as_str), Some("n-1234"));
+            assert!(env.contains_key("VSCODE_A11Y_MODE"));
+            assert!(env.contains_key("VSCODE_STABLE"));
+
+            // Unsupported args (-command custom) -> no injection
+            let slc_custom = json!({ "executable": pwsh, "args": ["-command", "echo hi"] });
+            assert!(shell_integration_injection(pwsh, &slc_custom, &options).is_none());
+
+            // bash.exe with no args -> --init-file injection
+            let bash = "C:\\Program Files\\Git\\bin\\bash.exe";
+            let (args, env) = shell_integration_injection(bash, &json!({ "executable": bash }), &options)
+                .expect("bash injection");
+            assert_eq!(args[0], "--init-file");
+            assert!(args[1].ends_with("/shellIntegration-bash.sh"), "got {:?}", args[1]);
+            assert_eq!(env.get("VSCODE_STABLE").and_then(Value::as_str), Some("0"));
+
+            // Unknown Windows shell (cmd.exe) -> no injection
+            let cmd = "C:\\Windows\\System32\\cmd.exe";
+            assert!(shell_integration_injection(cmd, &json!({ "executable": cmd }), &options).is_none());
+        } else {
+            // Dev-parity branch: sh/bash injection with --init-file
+            let bash = "/bin/bash";
+            let (args, env) =
+                shell_integration_injection(bash, &json!({ "executable": bash }), &options)
+                    .expect("bash injection");
+            assert_eq!(args[0], "--init-file");
+            assert!(args[1].contains("shellIntegration-bash.sh"));
+            assert_eq!(env.get("VSCODE_INJECTION").and_then(Value::as_str), Some("1"));
+            assert!(env.contains_key("VSCODE_SHELL_ENV_REPORTING"));
+        }
     }
 
     #[cfg(unix)]

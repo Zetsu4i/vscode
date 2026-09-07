@@ -321,7 +321,8 @@ jobs:
             staging/product.json \
             staging/nls.messages.json \
             staging/extensions/theme-defaults/package.json \
-            staging/extensions/theme-defaults/themes/dark_plus.json; do
+            staging/extensions/theme-defaults/themes/dark_plus.json \
+            staging/out/vs/workbench/contrib/terminal/common/scripts/shellIntegration.ps1; do
             [ -f "$f" ] || { echo "::error::missing client boot file: $f"; exit 1; }
             echo "ok  $f"
           done

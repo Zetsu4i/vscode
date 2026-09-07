@@ -423,8 +423,16 @@ Replace Electron/node-pty terminal backend with Rust PTY.
 - [x] Integrate xterm.js renderer IPC (onProcessData events carry the
       { id, event: { data } } payloads the renderer's LocalPty proxy
       subscribes to; no renderer changes needed)
-- [ ] Preserve shell integration behavior (injectedArgs stay empty for
-      now — script injection is the next round)
+- [x] Preserve shell integration behavior — replace-args injection mirrored
+      from getShellIntegrationInjection (terminalEnvironment.ts):
+      pwsh/powershell/bash.exe on Windows (bash/zsh/pwsh/fish on other
+      platforms for dev parity), VSCODE_INJECTION / VSCODE_NONCE /
+      VSCODE_STABLE / VSCODE_A11Y_MODE / VSCODE_SHELL_ENV_REPORTING /
+      VSCODE_SHELL_LOGIN env mixin, arg-classifier parity (implied/login
+      args), the scripts resolved from the client bundle
+      (terminal_channel::init), injected args served through `start` as
+      ITerminalLaunchResult.injectedArgs — unit-tested against the
+      upstream tables
 - [x] Preserve cwd and environment handling (string | UriComponents cwd,
       env merge: inherited → resolved env → launch-config env)
 - [ ] Persistent terminal state across app restarts (serialize/revive are
@@ -444,17 +452,36 @@ Replace Electron/node-pty terminal backend with Rust PTY.
 
 ## Phase 6: Search and Process Services
 
-### Status: ⬜ Not started
+### Status: 🟦 Re-scoped after routing analysis (2026-09)
 
 ### Goal
 
-Replace ripgrep/process backend with Rust equivalents.
+Workspace search and process execution with Rust-grade performance.
 
 ### Tasks
 
-- [ ] Implement search service using Rust grep/ripgrep-compatible crate
-- [ ] Preserve include/exclude glob behavior
-- [ ] Implement process service for tasks
+- [x] Routing analysis (important): desktop workspace search does NOT cross
+      a main-process IPC channel — `extHostSearch.ts` (EXTENSION HOST
+      process) registers `RipgrepSearchProvider` for `Schemas.file` /
+      `Schemas.vscodeUserData`, which the renderer consumes through
+      `mainThreadSearch` → `ISearchService.registerSearchResultProvider`.
+      Workspace search therefore depends on the Phase 7 extension host
+      sidecar; there is no standalone `search` channel for Mountain to
+      answer. (The browser build's `LocalFileSearchWorkerClient` — web
+      worker over the FS provider — is a renderer-only alternative that
+      would bypass the ext host, at the cost of diverging from desktop
+      behavior; revisit only if Phase 7 slips.)
+- [ ] Search acceptance rides Phase 7: after the ext-host sidecar lands,
+      ripgrep search works unmodified (rg is spawned by ext-host code with
+      node_modules/vscode-ripgrep binaries — the sidecar must ship them).
+      Alternative Mountain fast path: implement the ext-host search
+      provider surface in Rust behind the same registration point.
+- [ ] Process service for `process`-type tasks: local terminal-type tasks
+      already ride the Mountain PTY (localPty channel); process-type
+      execution (IProcessService channel) is a thin spawn/wait/kill surface
+      in Rust once needed.
+- [ ] Preserve include/exclude glob behavior (comes free with the ripgrep
+      path above)
 - [ ] Add environment inheritance
 - [ ] Add kill/exit code handling
 - [ ] Integrate task output back into workbench

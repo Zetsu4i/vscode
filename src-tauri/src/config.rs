@@ -149,6 +149,9 @@ fn build(app: &tauri::AppHandle) -> Value {
     crate::storage_channel::init(&user_dir);
     crate::profiles_channel::init(&user_dir);
     crate::keyboard_channel::init();
+    // Resolve the shell-integration scripts dir + product quality before
+    // any localPty createProcess arrives.
+    crate::terminal_channel::init(app);
 
     let machine_id = persistent_machine_id(&data_root);
     let session_id = crate::util::random_uuid_v4();
