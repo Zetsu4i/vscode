@@ -1516,9 +1516,15 @@ mod tests {
             .as_i64()
             .unwrap();
 
-        // start returns the (empty) injected args.
+        // start returns undefined/null when nothing was injected (upstream:
+        // `return undefined` — the tooltip then falls back to the SLC args).
         let launch = handle("start", &json!([id])).expect("start");
-        assert_eq!(launch.get("injectedArgs").and_then(Value::as_array), Some(&Vec::new()));
+        assert!(
+            launch.is_null()
+                || launch.get("injectedArgs").and_then(Value::as_array) == Some(&Vec::new()),
+            "expected no injectedArgs, got {:?}",
+            launch
+        );
 
         // InitialCwd is the cwd we passed.
         let cwd = handle("getInitialCwd", &json!([id])).expect("initialCwd");
