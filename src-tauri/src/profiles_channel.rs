@@ -253,12 +253,25 @@ fn create_profile(id: String, name: String, options: Option<&Value>, transient: 
     }
     let profile = Value::Object(profile);
 
+    // NOTE: fire_event MUST run outside the STATE lock — change_event()
+    // locks STATE again to snapshot the profile list, and std::sync::Mutex
+    // is not re-entrant: firing while holding the lock self-deadlocks the
+    // calling thread (found by the serial CI test run — the profiles
+    // round-trip test hung the whole binary).
+    let mut fired = None;
     if let Ok(mut state) = STATE.lock() {
         state.profiles.push(profile.clone());
         if !transient {
             let _ = state.persist(&dir);
         }
-        crate::ipc::fire_event("userDataProfiles", "onDidChangeProfiles", &change_event(&[&profile], &[], &[]));
+        fired = Some(profile.clone());
+    }
+    if let Some(profile) = fired {
+        crate::ipc::fire_event(
+            "userDataProfiles",
+            "onDidChangeProfiles",
+            &change_event(&[&profile], &[], &[]),
+        );
     }
     Ok(profile)
 }

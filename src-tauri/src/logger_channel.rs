@@ -72,10 +72,15 @@ fn sanitize_file_name(name: &str) -> String {
         .chars()
         .map(|c| if c.is_alphanumeric() || matches!(c, '.' | '-' | '_' | ' ') { c } else { '_' })
         .collect();
-    if cleaned.is_empty() {
-        "renderer.log".to_string()
-    } else {
+    // A name whose cleaned form carries no meaningful character (letters,
+    // digits, dot or dash — underscores may come from replaced separators)
+    // falls back to the default renderer log name: "///" cleans to "___"
+    // which would otherwise become a file literally named "___".
+    let meaningful = cleaned.chars().any(|c| c.is_alphanumeric() || c == '.' || c == '-');
+    if meaningful {
         cleaned
+    } else {
+        "renderer.log".to_string()
     }
 }
 
