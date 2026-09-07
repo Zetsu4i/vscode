@@ -17,11 +17,11 @@ Regenerate with `node build/ipc-contract/extract-ipc-contract.mjs` and commit th
 | --- | --- | --- | --- | --- |
 | `vscode:accessibilitySupportChanged` | renderer:on | no | 0 | 1 |
 | `vscode:addRemoveFolders` | renderer:on | no | 0 | 1 |
-| `vscode:browserView:areaPicked` | renderer:send | no | 0 | 1 |
 | `vscode:browserView:areaPickStopped` | renderer:send | no | 0 | 1 |
+| `vscode:browserView:areaPicked` | renderer:send | no | 0 | 1 |
 | `vscode:browserView:elementCommentRemoved` | renderer:send | no | 0 | 1 |
-| `vscode:browserView:elementPicked` | renderer:send | no | 0 | 1 |
 | `vscode:browserView:elementPickStopped` | renderer:send | no | 0 | 1 |
+| `vscode:browserView:elementPicked` | renderer:send | no | 0 | 1 |
 | `vscode:browserView:hideHighlight` | renderer:on | no | 0 | 1 |
 | `vscode:browserView:highlightElement` | renderer:on | no | 0 | 1 |
 | `vscode:browserView:keydown` | renderer:send | no | 0 | 1 |
@@ -69,6 +69,7 @@ Regenerate with `node build/ipc-contract/extract-ipc-contract.mjs` and commit th
 
 | Channel | Registered (main) | Consumed (renderer) | Mountain status | Commands known |
 | --- | --- | --- | --- | --- |
+| `IUserDataSyncResourceProviderService` | yes | no | not-implemented | unknown (dynamic) |
 | `agentHost` | no | yes | not-implemented | unknown (dynamic) |
 | `browserView` | yes | yes | not-implemented | unknown (dynamic) |
 | `browserViewGroup` | yes | yes | not-implemented | unknown (dynamic) |
@@ -78,13 +79,12 @@ Regenerate with `node build/ipc-contract/extract-ipc-contract.mjs` and commit th
 | `download` | yes | yes | not-implemented | unknown (dynamic) |
 | `encryption` | yes | no | not-implemented | unknown (dynamic) |
 | `extensionGalleryManifest` | yes | yes | not-implemented | unknown (dynamic) |
-| `extensionhostdebugservice` | yes | no | not-implemented | unknown (dynamic) |
 | `extensionRecommendationNotification` | yes | yes | not-implemented | unknown (dynamic) |
-| `extensions` | yes | yes | not-implemented | 26 (server switch) |
 | `extensionTipsService` | yes | yes | not-implemented | unknown (dynamic) |
+| `extensionhostdebugservice` | yes | no | not-implemented | unknown (dynamic) |
+| `extensions` | yes | yes | not-implemented | 26 (server switch) |
 | `externalTerminal` | yes | no | not-implemented | unknown (dynamic) |
 | `fileManagedSettings` | yes | yes | not-implemented | unknown (dynamic) |
-| `IUserDataSyncResourceProviderService` | yes | no | not-implemented | unknown (dynamic) |
 | `keyboardLayout` | yes | yes | implemented(*) | 1 (ProxyChannel: getKeyboardLayoutData) |
 | `languagePacks` | yes | no | not-implemented | unknown (dynamic) |
 | `launch` | yes | yes | implemented(3 commands) | unknown (dynamic) |
@@ -101,8 +101,8 @@ Regenerate with `node build/ipc-contract/extract-ipc-contract.mjs` and commit th
 | `policy` | yes | yes | not-implemented | 2 (server switch) |
 | `process` | yes | no | not-implemented | 4 (ProxyChannel: resolveProcesses, getSystemStatus, getSystemInfo, getPerformanceInfo) |
 | `profileStorageListener` | yes | yes | not-implemented | unknown (dynamic) |
-| `remoteextensionsenvironment` | yes | no | not-implemented | unknown (dynamic) |
 | `remoteTunnel` | yes | no | not-implemented | unknown (dynamic) |
+| `remoteextensionsenvironment` | yes | no | not-implemented | unknown (dynamic) |
 | `request` | yes | no | not-implemented | unknown (dynamic) |
 | `sandboxHelper` | yes | no | not-implemented | unknown (dynamic) |
 | `sharedWebContentExtractor` | yes | no | not-implemented | unknown (dynamic) |

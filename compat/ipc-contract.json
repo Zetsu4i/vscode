@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-06T22:15:54.435Z",
+  "generatedAt": "2026-09-07T17:21:06.448Z",
   "upstreamVersion": "1.138.0",
   "summary": {
     "filesScanned": 8824,
@@ -39,7 +39,7 @@
         }
       ]
     },
-    "vscode:browserView:areaPicked": {
+    "vscode:browserView:areaPickStopped": {
       "kinds": [
         "renderer:send"
       ],
@@ -53,7 +53,7 @@
         }
       ]
     },
-    "vscode:browserView:areaPickStopped": {
+    "vscode:browserView:areaPicked": {
       "kinds": [
         "renderer:send"
       ],
@@ -81,7 +81,7 @@
         }
       ]
     },
-    "vscode:browserView:elementPicked": {
+    "vscode:browserView:elementPickStopped": {
       "kinds": [
         "renderer:send"
       ],
@@ -95,7 +95,7 @@
         }
       ]
     },
-    "vscode:browserView:elementPickStopped": {
+    "vscode:browserView:elementPicked": {
       "kinds": [
         "renderer:send"
       ],
@@ -821,6 +821,20 @@
     }
   },
   "protocolChannels": {
+    "IUserDataSyncResourceProviderService": {
+      "registered": true,
+      "consumed": false,
+      "testOnly": false,
+      "mountain": "not-implemented",
+      "refs": [
+        {
+          "file": "src/vs/code/electron-utility/sharedProcess/sharedProcessMain.ts",
+          "kind": "server:register",
+          "side": "shared-process",
+          "test": false
+        }
+      ]
+    },
     "agentHost": {
       "registered": false,
       "consumed": true,
@@ -1115,20 +1129,6 @@
         }
       ]
     },
-    "extensionhostdebugservice": {
-      "registered": true,
-      "consumed": false,
-      "testOnly": false,
-      "mountain": "not-implemented",
-      "refs": [
-        {
-          "file": "src/vs/code/electron-main/app.ts",
-          "kind": "server:register",
-          "side": "electron-main",
-          "test": false
-        }
-      ]
-    },
     "extensionRecommendationNotification": {
       "registered": true,
       "consumed": true,
@@ -1145,6 +1145,40 @@
           "file": "src/vs/workbench/contrib/extensions/electron-browser/extensions.contribution.ts",
           "kind": "server:register",
           "side": "renderer",
+          "test": false
+        }
+      ]
+    },
+    "extensionTipsService": {
+      "registered": true,
+      "consumed": true,
+      "testOnly": false,
+      "mountain": "not-implemented",
+      "refs": [
+        {
+          "file": "src/vs/code/electron-utility/sharedProcess/sharedProcessMain.ts",
+          "kind": "server:register",
+          "side": "shared-process",
+          "test": false
+        },
+        {
+          "file": "src/vs/workbench/services/extensionManagement/electron-browser/extensionTipsService.ts",
+          "kind": "client:get",
+          "side": "renderer",
+          "test": false
+        }
+      ]
+    },
+    "extensionhostdebugservice": {
+      "registered": true,
+      "consumed": false,
+      "testOnly": false,
+      "mountain": "not-implemented",
+      "refs": [
+        {
+          "file": "src/vs/code/electron-main/app.ts",
+          "kind": "server:register",
+          "side": "electron-main",
           "test": false
         }
       ]
@@ -1203,26 +1237,6 @@
         "getOtherExecutableBasedTips"
       ]
     },
-    "extensionTipsService": {
-      "registered": true,
-      "consumed": true,
-      "testOnly": false,
-      "mountain": "not-implemented",
-      "refs": [
-        {
-          "file": "src/vs/code/electron-utility/sharedProcess/sharedProcessMain.ts",
-          "kind": "server:register",
-          "side": "shared-process",
-          "test": false
-        },
-        {
-          "file": "src/vs/workbench/services/extensionManagement/electron-browser/extensionTipsService.ts",
-          "kind": "client:get",
-          "side": "renderer",
-          "test": false
-        }
-      ]
-    },
     "externalTerminal": {
       "registered": true,
       "consumed": false,
@@ -1259,20 +1273,6 @@
           "file": "src/vs/workbench/electron-browser/desktop.main.ts",
           "kind": "client:get",
           "side": "renderer",
-          "test": false
-        }
-      ]
-    },
-    "IUserDataSyncResourceProviderService": {
-      "registered": true,
-      "consumed": false,
-      "testOnly": false,
-      "mountain": "not-implemented",
-      "refs": [
-        {
-          "file": "src/vs/code/electron-utility/sharedProcess/sharedProcessMain.ts",
-          "kind": "server:register",
-          "side": "shared-process",
           "test": false
         }
       ]
@@ -1832,20 +1832,6 @@
         }
       ]
     },
-    "remoteextensionsenvironment": {
-      "registered": true,
-      "consumed": false,
-      "testOnly": false,
-      "mountain": "not-implemented",
-      "refs": [
-        {
-          "file": "src/vs/server/node/serverServices.ts",
-          "kind": "server:register",
-          "side": "node-main",
-          "test": false
-        }
-      ]
-    },
     "remoteTunnel": {
       "registered": true,
       "consumed": false,
@@ -1856,6 +1842,20 @@
           "file": "src/vs/code/electron-utility/sharedProcess/sharedProcessMain.ts",
           "kind": "server:register",
           "side": "shared-process",
+          "test": false
+        }
+      ]
+    },
+    "remoteextensionsenvironment": {
+      "registered": true,
+      "consumed": false,
+      "testOnly": false,
+      "mountain": "not-implemented",
+      "refs": [
+        {
+          "file": "src/vs/server/node/serverServices.ts",
+          "kind": "server:register",
+          "side": "node-main",
           "test": false
         }
       ]
@@ -2534,11 +2534,11 @@
     },
     {
       "file": "src/vs/base/parts/ipc/common/ipc.ts",
-      "kind": "server:register"
+      "kind": "client:get"
     },
     {
       "file": "src/vs/base/parts/ipc/common/ipc.ts",
-      "kind": "client:get"
+      "kind": "server:register"
     },
     {
       "file": "src/vs/base/parts/ipc/electron-browser/ipc.mp.ts",
@@ -2554,27 +2554,23 @@
     },
     {
       "file": "src/vs/base/parts/ipc/test/common/ipc.test.ts",
-      "kind": "server:register"
-    },
-    {
-      "file": "src/vs/base/parts/ipc/test/common/ipc.test.ts",
       "kind": "client:get"
     },
     {
-      "file": "src/vs/base/parts/sandbox/electron-browser/preload-aux.ts",
-      "kind": "renderer:send"
+      "file": "src/vs/base/parts/ipc/test/common/ipc.test.ts",
+      "kind": "server:register"
     },
     {
       "file": "src/vs/base/parts/sandbox/electron-browser/preload-aux.ts",
       "kind": "renderer:invoke"
     },
     {
-      "file": "src/vs/base/parts/sandbox/electron-browser/preload.ts",
-      "kind": "renderer:invoke"
+      "file": "src/vs/base/parts/sandbox/electron-browser/preload-aux.ts",
+      "kind": "renderer:send"
     },
     {
       "file": "src/vs/base/parts/sandbox/electron-browser/preload.ts",
-      "kind": "renderer:send"
+      "kind": "renderer:invoke"
     },
     {
       "file": "src/vs/base/parts/sandbox/electron-browser/preload.ts",
@@ -2589,12 +2585,16 @@
       "kind": "renderer:removeListener"
     },
     {
-      "file": "src/vs/code/electron-main/app.ts",
-      "kind": "server:register"
+      "file": "src/vs/base/parts/sandbox/electron-browser/preload.ts",
+      "kind": "renderer:send"
     },
     {
       "file": "src/vs/code/electron-main/app.ts",
       "kind": "client:get"
+    },
+    {
+      "file": "src/vs/code/electron-main/app.ts",
+      "kind": "server:register"
     },
     {
       "file": "src/vs/code/electron-utility/sharedProcess/sharedProcessMain.ts",
@@ -2618,6 +2618,10 @@
     },
     {
       "file": "src/vs/platform/agentHost/electron-browser/localAgentHostService.ts",
+      "kind": "client:get"
+    },
+    {
+      "file": "src/vs/platform/agentHost/electron-browser/localAgentHostService.ts",
       "kind": "renderer:on"
     },
     {
@@ -2633,15 +2637,15 @@
       "kind": "server:register"
     },
     {
-      "file": "src/vs/platform/agentHost/electron-browser/localAgentHostService.ts",
-      "kind": "client:get"
-    },
-    {
       "file": "src/vs/platform/agentHost/electron-browser/sshRemoteAgentHostServiceImpl.ts",
       "kind": "client:get"
     },
     {
       "file": "src/vs/platform/agentHost/electron-browser/wslRemoteAgentHostServiceImpl.ts",
+      "kind": "client:get"
+    },
+    {
+      "file": "src/vs/platform/agentHost/electron-main/electronAgentHostStarter.ts",
       "kind": "client:get"
     },
     {
@@ -2653,16 +2657,12 @@
       "kind": "main:removeListener"
     },
     {
-      "file": "src/vs/platform/agentHost/electron-main/electronAgentHostStarter.ts",
+      "file": "src/vs/platform/agentHost/node/agentHostMain.ts",
       "kind": "client:get"
     },
     {
       "file": "src/vs/platform/agentHost/node/agentHostMain.ts",
       "kind": "server:register"
-    },
-    {
-      "file": "src/vs/platform/agentHost/node/agentHostMain.ts",
-      "kind": "client:get"
     },
     {
       "file": "src/vs/platform/agentHost/node/agentHostService.ts",
@@ -2678,14 +2678,10 @@
     },
     {
       "file": "src/vs/platform/ipc/common/mainProcessService.ts",
-      "kind": "server:register"
+      "kind": "client:get"
     },
     {
       "file": "src/vs/platform/ipc/common/mainProcessService.ts",
-      "kind": "client:get"
-    },
-    {
-      "file": "src/vs/platform/ipc/common/services.ts",
       "kind": "server:register"
     },
     {
@@ -2693,20 +2689,20 @@
       "kind": "client:get"
     },
     {
-      "file": "src/vs/platform/ipc/electron-browser/mainProcessService.ts",
+      "file": "src/vs/platform/ipc/common/services.ts",
       "kind": "server:register"
     },
     {
       "file": "src/vs/platform/ipc/electron-browser/mainProcessService.ts",
       "kind": "client:get"
+    },
+    {
+      "file": "src/vs/platform/ipc/electron-browser/mainProcessService.ts",
+      "kind": "server:register"
     },
     {
       "file": "src/vs/platform/ipc/electron-browser/services.ts",
       "kind": "client:get"
-    },
-    {
-      "file": "src/vs/platform/lifecycle/electron-main/lifecycleMainService.ts",
-      "kind": "main:removeListener"
     },
     {
       "file": "src/vs/platform/lifecycle/electron-main/lifecycleMainService.ts",
@@ -2715,6 +2711,10 @@
     {
       "file": "src/vs/platform/lifecycle/electron-main/lifecycleMainService.ts",
       "kind": "main:once"
+    },
+    {
+      "file": "src/vs/platform/lifecycle/electron-main/lifecycleMainService.ts",
+      "kind": "main:removeListener"
     },
     {
       "file": "src/vs/platform/localTranscription/node/localTranscriptionMain.ts",
@@ -2774,19 +2774,19 @@
     },
     {
       "file": "src/vs/sessions/contrib/providers/remoteAgentHost/browser/remoteAgentHostLogForwarder.ts",
-      "kind": "server:register"
+      "kind": "client:get"
     },
     {
       "file": "src/vs/sessions/contrib/providers/remoteAgentHost/browser/remoteAgentHostLogForwarder.ts",
-      "kind": "client:get"
-    },
-    {
-      "file": "src/vs/sessions/contrib/providers/remoteAgentHost/electron-browser/devContainerAgentHostConnector.contribution.ts",
       "kind": "server:register"
     },
     {
       "file": "src/vs/sessions/contrib/providers/remoteAgentHost/electron-browser/devContainerAgentHostConnector.contribution.ts",
       "kind": "client:get"
+    },
+    {
+      "file": "src/vs/sessions/contrib/providers/remoteAgentHost/electron-browser/devContainerAgentHostConnector.contribution.ts",
+      "kind": "server:register"
     },
     {
       "file": "src/vs/sessions/contrib/providers/remoteAgentHost/electron-browser/tunnelAgentHostServiceImpl.ts",
@@ -2794,19 +2794,19 @@
     },
     {
       "file": "src/vs/workbench/api/browser/mainThreadOutputService.ts",
-      "kind": "server:register"
+      "kind": "client:get"
     },
     {
       "file": "src/vs/workbench/api/browser/mainThreadOutputService.ts",
-      "kind": "client:get"
-    },
-    {
-      "file": "src/vs/workbench/contrib/chat/browser/agentSessions/agentSessionsModel.ts",
       "kind": "server:register"
     },
     {
       "file": "src/vs/workbench/contrib/chat/browser/agentSessions/agentSessionsModel.ts",
       "kind": "client:get"
+    },
+    {
+      "file": "src/vs/workbench/contrib/chat/browser/agentSessions/agentSessionsModel.ts",
+      "kind": "server:register"
     },
     {
       "file": "src/vs/workbench/contrib/chat/browser/chatDebug/agentHostLogSources.ts",
@@ -2818,11 +2818,11 @@
     },
     {
       "file": "src/vs/workbench/contrib/logs/common/logs.contribution.ts",
-      "kind": "server:register"
+      "kind": "client:get"
     },
     {
       "file": "src/vs/workbench/contrib/logs/common/logs.contribution.ts",
-      "kind": "client:get"
+      "kind": "server:register"
     },
     {
       "file": "src/vs/workbench/contrib/mcp/browser/mcpGatewayToolBrokerContribution.ts",
@@ -2842,19 +2842,19 @@
     },
     {
       "file": "src/vs/workbench/contrib/output/browser/output.contribution.ts",
-      "kind": "server:register"
+      "kind": "client:get"
     },
     {
       "file": "src/vs/workbench/contrib/output/browser/output.contribution.ts",
-      "kind": "client:get"
-    },
-    {
-      "file": "src/vs/workbench/contrib/output/browser/outputServices.ts",
       "kind": "server:register"
     },
     {
       "file": "src/vs/workbench/contrib/output/browser/outputServices.ts",
       "kind": "client:get"
+    },
+    {
+      "file": "src/vs/workbench/contrib/output/browser/outputServices.ts",
+      "kind": "server:register"
     },
     {
       "file": "src/vs/workbench/contrib/remote/electron-browser/remote.contribution.ts",
@@ -2914,19 +2914,19 @@
     },
     {
       "file": "src/vs/workbench/services/output/common/output.ts",
-      "kind": "server:register"
+      "kind": "client:get"
     },
     {
       "file": "src/vs/workbench/services/output/common/output.ts",
-      "kind": "client:get"
-    },
-    {
-      "file": "src/vs/workbench/services/remote/common/abstractRemoteAgentService.ts",
       "kind": "server:register"
     },
     {
       "file": "src/vs/workbench/services/remote/common/abstractRemoteAgentService.ts",
       "kind": "client:get"
+    },
+    {
+      "file": "src/vs/workbench/services/remote/common/abstractRemoteAgentService.ts",
+      "kind": "server:register"
     },
     {
       "file": "src/vs/workbench/services/remote/common/remoteFileSystemProviderClient.ts",
@@ -2942,11 +2942,11 @@
     },
     {
       "file": "src/vs/workbench/services/sharedProcess/electron-browser/sharedProcessService.ts",
-      "kind": "server:register"
+      "kind": "client:get"
     },
     {
       "file": "src/vs/workbench/services/sharedProcess/electron-browser/sharedProcessService.ts",
-      "kind": "client:get"
+      "kind": "server:register"
     },
     {
       "file": "src/vs/workbench/services/textMate/browser/backgroundTokenization/worker/textMateTokenizationWorker.worker.ts",
@@ -2962,11 +2962,11 @@
     },
     {
       "file": "src/vs/workbench/test/electron-browser/workbenchTestServices.ts",
-      "kind": "server:register"
+      "kind": "client:get"
     },
     {
       "file": "src/vs/workbench/test/electron-browser/workbenchTestServices.ts",
-      "kind": "client:get"
+      "kind": "server:register"
     }
   ]
 }

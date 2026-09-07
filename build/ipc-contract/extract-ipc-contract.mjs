@@ -30,8 +30,15 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const ROOT = path.resolve(new URL('.', import.meta.url).pathname, '../..');
+// NOTE: fileURLToPath, NOT `new URL(...).pathname`. On Windows the .pathname
+// of a file: URL is "/D:/a/..." (leading slash, forward slashes); feeding
+// that into path.win32.resolve grafts it onto the current drive and yields
+// the doubled "D:\D:\a\..." paths that crashed CI (ENOENT on
+// D:\D:\a\vscode\vscode\src\vs). fileURLToPath handles the drive letter
+// correctly on win32 and is a no-op equivalent on posix.
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const SRC = path.join(ROOT, 'src', 'vs');
 const OUT_JSON = path.join(ROOT, 'compat', 'ipc-contract.json');
 const OUT_MD = path.join(ROOT, 'compat', 'ipc-contract.md');
@@ -312,7 +319,11 @@ function collectMountainCoverage() {
 // ---------------------------------------------------------------------------
 
 function buildContract() {
-  const files = walk(SRC);
+  // Sorted on purpose: fs.readdirSync order is OS-dependent (ext4 hash order
+  // on Linux, alphabetical on NTFS). The --check mode compares JSON *bytes*
+  // against the checked-in file, so the scan must be deterministic across
+  // dev/CI platforms or every Windows run would report spurious drift.
+  const files = walk(SRC).sort();
   const out = { plain: new Map(), protocol: new Map(), dynamic: [] };
   for (const file of files) {
     try {
@@ -325,8 +336,12 @@ function buildContract() {
   const productText = fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8');
   const version = JSON.parse(productText).version ?? 'unknown';
 
+  // Code-unit sort (NOT localeCompare): the --check byte comparison must
+  // be identical on Linux and Windows — localeCompare ordering is ICU/locale
+  // dependent and can differ across platforms.
+  const byName = ([a], [b]) => (a < b ? -1 : a > b ? 1 : 0);
   const plain = {};
-  for (const [name, entry] of [...out.plain.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+  for (const [name, entry] of [...out.plain.entries()].sort(byName)) {
     const productRefs = entry.refs.filter((r) => !r.test);
     const isTestOnly = productRefs.length === 0;
     plain[name] = {
@@ -356,7 +371,7 @@ function buildContract() {
   }
 
   const protocol = {};
-  for (const [name, entry] of [...out.protocol.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+  for (const [name, entry] of [...out.protocol.entries()].sort(byName)) {
     const productRefs = entry.refs.filter((r) => !r.test);
     const isTestOnly = productRefs.length === 0;
     const servers = entry.refs.filter((r) => r.kind === 'server:register' && !r.test);
@@ -373,7 +388,8 @@ function buildContract() {
     };
   }
 
-  const dynamic = [...new Map(out.dynamic.map((d) => [`${d.file}:${d.kind}`, d])).values()];
+  const dynamic = [...new Map(out.dynamic.map((d) => [`${d.file}:${d.kind}`, d])).values()]
+    .sort((a, b) => (`${a.file}:${a.kind}` < `${b.file}:${b.kind}` ? -1 : `${a.file}:${a.kind}` > `${b.file}:${b.kind}` ? 1 : 0));
 
   const productPlain = Object.fromEntries(Object.entries(plain).filter(([, v]) => !v.testOnly));
   const productProtocol = Object.fromEntries(Object.entries(protocol).filter(([, v]) => !v.testOnly && (v.registered || v.consumed)));
