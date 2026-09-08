@@ -209,7 +209,16 @@ jobs:
       - name: Bundle product client (esbuild, minified, NLS)
         if: steps.client-bundle-cache.outputs.cache-hit != 'true'
         shell: bash
-        run: node build/next/index.ts bundle --out out-client --minify --nls --target desktop
+        run: |
+          set -euo pipefail
+          # copy-codicons parity (build/lib/compilation.ts): the bundler
+          # compiles CSS straight from src/, and codicon.css references
+          # ./codicon.ttf. That file is gitignored and only exists after the
+          # copy task — which the compile step normally performs, but the
+          # compile cache hit skips it. Always copy it here (the exact
+          # copyCodiconsImpl semantics).
+          node -e "const fs=require('fs');const src='node_modules/@vscode/codicons/dist/codicon.ttf';if(!fs.existsSync(src)){console.error('codicon.ttf not found in node_modules');process.exit(1);}fs.mkdirSync('src/vs/base/browser/ui/codicons/codicon',{recursive:true});fs.copyFileSync(src,'src/vs/base/browser/ui/codicons/codicon/codicon.ttf');console.log('codicon.ttf copied into src tree');"
+          node build/next/index.ts bundle --out out-client --minify --nls --target desktop
 
       - name: Save bundled client cache
         if: steps.client-bundle-cache.outputs.cache-hit != 'true'

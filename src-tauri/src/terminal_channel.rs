@@ -1094,9 +1094,20 @@ impl Utf8Decoder {
 // ---------------------------------------------------------------------------
 
 /// getProfiles(workspaceId, profiles, defaultProfile, includeDetectedProfiles)
-/// -> ITerminalProfile[]. Mirrors terminalProfiles.ts: config profiles are
-/// passed through (the renderer resolves most variables), detected profiles
-/// are appended for the shells that actually exist on this machine.
+/// -> ITerminalProfile[]. Mirrors terminalProfiles.ts `detectAvailableProfiles`
+/// + `transformProfile`: config profiles are RESOLVED exactly like the
+/// upstream pty host does —
+///   * `source`-based profiles (PowerShell / Git Bash) map onto the
+///     well-known candidate paths for that source,
+///   * `path` given as an ARRAY of candidates (the shipped default for
+///     "Command Prompt") picks the first candidate that exists on disk,
+///   * `${env:NAME}` variables are substituted before the existence check,
+///   * profiles whose every candidate is missing are dropped (upstream
+///     validateProfilePaths returns undefined),
+/// so every returned profile has a STRING `path` (the renderer calls
+/// `path.parse(profile.path)` without guards — see
+/// terminalProfileResolverService._getUnresolvedFallbackDefaultProfile).
+/// Detected profiles are appended for the shells that actually exist.
 fn get_profiles(args: &[Value]) -> Result<Value, String> {
     let profiles_arg = args.get(1).cloned().unwrap_or(Value::Null);
     let default_profile = args.get(2).and_then(Value::as_str).unwrap_or("");
@@ -1105,26 +1116,17 @@ fn get_profiles(args: &[Value]) -> Result<Value, String> {
     let mut out: Vec<Value> = Vec::new();
     let mut names: Vec<String> = Vec::new();
 
-    // 1. Config-defined profiles (object map: name -> { path, args, ... }).
+    // 1. Config-defined profiles (object map: name -> { path, source, ... }),
+    //    resolved like upstream's transformProfile.
     if let Some(config) = profiles_arg.as_object() {
         for (name, spec) in config {
-            names.push(name.clone());
-            let mut profile = match spec {
-                Value::Object(fields) => {
-                    let mut map = Map::new();
-                    for (key, value) in fields {
-                        map.insert(key.clone(), value.clone());
-                    }
-                    map
-                }
-                _ => Map::new(),
-            };
-            profile.insert("profileName".to_string(), json!(name));
-            profile.insert(
-                "isDefault".to_string(),
-                json!(!name.is_empty() && *name == default_profile),
-            );
-            out.push(Value::Object(profile));
+            if spec.is_null() {
+                continue; // disabled profile (value null) — excluded
+            }
+            if let Some(profile) = resolve_config_profile(name, spec, default_profile) {
+                names.push(name.clone());
+                out.push(profile);
+            }
         }
     }
 
@@ -1149,6 +1151,138 @@ fn get_profiles(args: &[Value]) -> Result<Value, String> {
     }
 
     Ok(Value::Array(out))
+}
+
+/// `ProfileSource` candidates (terminalProfiles.ts profileSources on
+/// Windows): every entry is a string of candidates in priority order.
+fn source_candidate_paths(source: &str) -> Vec<String> {
+    let windir = std::env::var("windir").unwrap_or_else(|_| "C:\\Windows".to_string());
+    let system32 = format!("{}\\System32", windir);
+    let program_files =
+        std::env::var("ProgramFiles").unwrap_or_else(|_| "C:\\Program Files".to_string());
+    match source {
+        "PowerShell" => vec![
+            format!("{}\\PowerShell\\7\\pwsh.exe", program_files),
+            format!("{}\\WindowsPowerShell\\v1.0\\powershell.exe", system32),
+        ],
+        "Git Bash" => vec![
+            format!("{}\\Git\\bin\\bash.exe", program_files),
+            format!("{}\\Git\\usr\\bin\\bash.exe", program_files),
+        ],
+        _ => Vec::new(),
+    }
+}
+
+/// Substitute `${env:NAME}` in a profile path (the variable form the shipped
+/// defaults use; other variables pass through untouched).
+fn substitute_env_vars(path: &str) -> String {
+    let mut out = String::with_capacity(path.len());
+    let mut rest = path;
+    while let Some(start) = rest.find("${env:") {
+        out.push_str(&rest[..start]);
+        let after = &rest[start + 7..];
+        if let Some(end) = after.find('}') {
+            let name = &after[..end];
+            let value = std::env::var(name).unwrap_or_default();
+            out.push_str(&value);
+            rest = &after[end + 1..];
+        } else {
+            out.push_str(&rest[start..]);
+            return out;
+        }
+    }
+    out.push_str(rest);
+    out
+}
+
+/// One config profile -> resolved ITerminalProfile (None when it cannot be
+/// resolved: unknown source or no candidate path exists).
+fn resolve_config_profile(name: &str, spec: &Value, default_profile: &str) -> Option<Value> {
+    let fields = spec.as_object()?;
+    let mut args: Option<Value> = None;
+    let mut icon: Option<Value> = None;
+    let mut candidates: Vec<String> = Vec::new();
+
+    if let Some(source) = fields.get("source").and_then(Value::as_str) {
+        candidates = source_candidate_paths(source)
+            .iter()
+            .map(|p| substitute_env_vars(p))
+            .collect();
+        match source {
+            "Git Bash" => {
+                if !fields.contains_key("args") {
+                    args = Some(json!(["--login"]));
+                }
+                icon = Some(json!({ "id": "terminal-git-bash" }));
+            }
+            "PowerShell" => {
+                icon = Some(json!({ "id": "terminal-powershell" }));
+            }
+            _ => {}
+        }
+        if let Some(configured) = fields.get("args") {
+            args = Some(configured.clone());
+        }
+        if let Some(configured) = fields.get("icon") {
+            icon = Some(configured.clone());
+        }
+    } else {
+        let path_spec = fields.get("path")?;
+        let raw_candidates: Vec<Value> = match path_spec {
+            Value::Array(list) => list.clone(),
+            single => vec![single.clone()],
+        };
+        for candidate in raw_candidates {
+            let path_value = match &candidate {
+                Value::String(path) => path.clone(),
+                // ITerminalUnsafePath form: { path, isUnsafe }
+                Value::Object(map) => map
+                    .get("path")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .to_string(),
+                _ => continue,
+            };
+            if path_value.is_empty() {
+                continue;
+            }
+            candidates.push(substitute_env_vars(&path_value));
+        }
+        if let Some(configured) = fields.get("args") {
+            args = Some(configured.clone());
+        }
+        if let Some(configured) = fields.get("icon") {
+            icon = Some(configured.clone());
+        }
+    }
+
+    if candidates.is_empty() {
+        return None;
+    }
+    // validateProfilePaths: first existing candidate wins.
+    let resolved_path = candidates.into_iter().find(|c| PathBuf::from(c).is_file())?;
+
+    let mut profile = Map::new();
+    profile.insert("profileName".to_string(), json!(name));
+    profile.insert("path".to_string(), json!(resolved_path));
+    if let Some(args) = args {
+        profile.insert("args".to_string(), args);
+    }
+    if let Some(env) = fields.get("env") {
+        profile.insert("env".to_string(), env.clone());
+    }
+    if let Some(override_name) = fields.get("overrideName") {
+        profile.insert("overrideName".to_string(), override_name.clone());
+    }
+    if let Some(icon) = icon {
+        profile.insert("icon".to_string(), icon);
+    }
+    profile.insert(
+        "isDefault".to_string(),
+        json!(!name.is_empty() && name == default_profile),
+    );
+    profile.insert("isAutoDetected".to_string(), json!(false));
+    Some(Value::Object(profile))
 }
 
 /// Windows detection set (terminalProfiles.ts detectAvailableWindowsProfiles):
@@ -1345,6 +1479,96 @@ fn free_port_kill_process(port: &Value) -> Result<Value, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn env_var_substitution() {
+        std::env::set_var("VSTAURI_TEST_VAR", "hello");
+        assert_eq!(
+            substitute_env_vars("${env:VSTAURI_TEST_VAR}/bin"),
+            "hello/bin"
+        );
+        assert_eq!(
+            substitute_env_vars("C:/x/${env:VSTAURI_TEST_VAR}/${env:VSTAURI_TEST_VAR}"),
+            "C:/x/hello/hello"
+        );
+        assert_eq!(substitute_env_vars("${env:VSTAURI_MISSING_VAR_12345}"), "");
+        assert_eq!(substitute_env_vars("plain/path"), "plain/path");
+        assert_eq!(substitute_env_vars("${env:unterminated"), "${env:unterminated");
+    }
+
+    #[test]
+    fn config_profile_path_array_resolves_to_string() {
+        // The shipped "Command Prompt" default: path is an ARRAY of
+        // candidates. The resolver must return a single existing string.
+        let spec = json!({
+            "path": [
+                "C:\\Definitely\\Not\\Here\\cmd.exe",
+                "${env:windir}\\System32\\cmd.exe"
+            ],
+            "args": [],
+        });
+        if cfg!(windows) {
+            let profile = resolve_config_profile("Command Prompt", &spec, "Command Prompt")
+                .expect("profile should resolve");
+            assert!(profile["path"].is_string(), "path must be a string, got: {}", profile["path"]);
+            assert!(profile["path"].as_str().unwrap().ends_with("cmd.exe"));
+            assert_eq!(profile["isDefault"], json!(true));
+            assert_eq!(profile["isAutoDetected"], json!(false));
+        } else {
+            // Non-Windows hosts: the windows candidates don't exist, the
+            // profile is dropped like upstream's validateProfilePaths.
+            assert!(resolve_config_profile("Command Prompt", &spec, "x").is_none());
+        }
+    }
+
+    #[test]
+    fn config_profile_source_resolves_to_string() {
+        let spec = json!({ "source": "PowerShell", "icon": "terminal-powershell" });
+        if cfg!(windows) {
+            let profile = resolve_config_profile("PowerShell", &spec, "")
+                .expect("source profile should resolve");
+            assert!(profile["path"].is_string());
+            assert!(profile["args"].is_null()); // no default args for PowerShell source
+        } else {
+            assert!(resolve_config_profile("PowerShell", &spec, "").is_none());
+        }
+    }
+
+    #[test]
+    fn config_profile_unresolvable_is_dropped() {
+        let spec = json!({ "path": ["Z:\\nope\\nope.exe"] });
+        assert!(resolve_config_profile("Ghost", &spec, "").is_none());
+        let unknown_source = json!({ "source": "Cmder" });
+        assert!(resolve_config_profile("Cmder", &unknown_source, "").is_none());
+        let null_spec = Value::Null;
+        assert!(resolve_config_profile("Disabled", &null_spec, "").is_none());
+    }
+
+    #[test]
+    fn get_profiles_returns_only_string_paths() {
+        // The exact configuration the workbench ships as defaults —
+        // regression test for the `path.parse([object Array])` crash in
+        // terminalProfileResolverService._getUnresolvedFallbackDefaultProfile.
+        let profiles = json!({
+            "PowerShell": { "source": "PowerShell", "icon": "terminal-powershell" },
+            "Command Prompt": {
+                "path": [ "C:\\missing\\cmd.exe", "${env:windir}\\System32\\cmd.exe" ],
+                "args": []
+            },
+            "Disabled": null
+        });
+        let result = get_profiles(&[Value::Null, profiles, json!("PowerShell"), json!(false)])
+            .expect("getProfiles should answer");
+        let list = result.as_array().expect("array of profiles");
+        for profile in list {
+            assert!(
+                profile.get("path").and_then(Value::as_str).is_some(),
+                "every profile must carry a STRING path: {}",
+                profile
+            );
+            assert!(profile.get("profileName").and_then(Value::as_str).is_some());
+        }
+    }
 
     #[test]
     fn utf8_decoder_handles_split_multi_byte_sequences() {
