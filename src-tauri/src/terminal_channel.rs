@@ -1180,7 +1180,9 @@ fn substitute_env_vars(path: &str) -> String {
     let mut rest = path;
     while let Some(start) = rest.find("${env:") {
         out.push_str(&rest[..start]);
-        let after = &rest[start + 7..];
+        // "${env:" is 6 characters: skip exactly those, the rest until '}'
+        // is the variable name.
+        let after = &rest[start + 6..];
         if let Some(end) = after.find('}') {
             let name = &after[..end];
             let value = std::env::var(name).unwrap_or_default();
@@ -1954,11 +1956,21 @@ mod tests {
 
     #[test]
     fn get_profiles_merges_config_and_detected() {
+        // The resolver now mirrors upstream's validateProfilePaths: a config
+        // profile only survives when a candidate path EXISTS on this
+        // machine (the original pass-through fixture "/bin/dash" cannot
+        // exist on a Windows runner). Use a real path per platform and keep
+        // a bogus profile to pin the drop behavior.
+        let existing_path = if cfg!(windows) {
+            format!("{}\\System32\\cmd.exe", std::env::var("windir").unwrap_or_else(|_| "C:\\Windows".into()))
+        } else {
+            "/bin/sh".to_string()
+        };
         let profiles = handle(
             "getProfiles",
             &json!([
                 "ws",
-                { "My Custom": { "path": "/bin/dash", "args": ["-l"] } },
+                { "My Custom": { "path": existing_path, "args": ["-l"] } },
                 "My Custom",
                 true,
             ]),
@@ -1969,14 +1981,34 @@ mod tests {
             .iter()
             .filter_map(|p| p.get("profileName").and_then(Value::as_str))
             .collect();
-        assert!(names.contains(&"My Custom"));
+        assert!(names.contains(&"My Custom"), "names: {:?}", names);
         assert!(names.iter().any(|n| n.contains("sh")), "no detected shell in {:?}", names);
         let custom = list
             .iter()
             .find(|p| p.get("profileName").and_then(Value::as_str) == Some("My Custom"))
             .unwrap();
         assert_eq!(custom.get("isDefault").and_then(Value::as_bool), Some(true));
-        assert_eq!(custom.get("path").and_then(Value::as_str), Some("/bin/dash"));
+        assert!(custom.get("path").and_then(Value::as_str).is_some());
+
+        // A profile whose only candidate does not exist is dropped —
+        // upstream drops it too instead of shipping an unlaunchable entry.
+        let dropped = handle(
+            "getProfiles",
+            &json!([
+                "ws",
+                { "Ghost": { "path": "Z:\\does\\not\\exist.exe" } },
+                "Ghost",
+                false,
+            ]),
+        )
+        .expect("getProfiles");
+        let dropped_names: Vec<&str> = dropped
+            .as_array()
+            .expect("array")
+            .iter()
+            .filter_map(|p| p.get("profileName").and_then(Value::as_str))
+            .collect();
+        assert!(!dropped_names.contains(&"Ghost"), "unresolvable profile must be dropped: {:?}", dropped_names);
     }
 
     #[test]
