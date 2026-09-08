@@ -33,6 +33,7 @@ mod shim;
 mod storage_channel;
 mod terminal_channel;
 mod util;
+mod workspaces_channel;
 
 use tauri::Manager;
 

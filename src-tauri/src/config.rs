@@ -143,11 +143,37 @@ fn build(app: &tauri::AppHandle) -> Value {
             crate::logger::log_app("error", &format!("cannot create dir {:?}: {}", dir, err));
         }
     }
+    // First-boot noise reduction: the workbench probes a fixed set of
+    // profile sub-dirs during startup (user extensions, snippets, prompts,
+    // globalStorage, per-window logs). A missing dir is handled, but it
+    // surfaces as FileSystemError(FileNotFound) noise in the renderer log
+    // and in `vscode-file 404` traces. Electron's first boot creates the
+    // same tree; match it. `logs/<session>/window1` mirrors what
+    // `logsHome`/`windowLogsPath` (environmentService.ts) derive from the
+    // `logsPath` we put into the configuration below.
+    let session_stamp = chrono_like_stamp(
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0),
+    );
+    let session_logs_dir = logs_dir.join(&session_stamp);
+    for dir in [
+        user_dir.join("globalStorage"),
+        user_dir.join("snippets"),
+        user_dir.join("prompts"),
+        user_dir.join("extensions"),
+        user_dir.join("History"),
+        session_logs_dir.join("window1"),
+    ] {
+        let _ = std::fs::create_dir_all(dir);
+    }
     crate::logger::init(&logs_dir);
     crate::ipc::init(&logs_dir);
     crate::logger_channel::init(&logs_dir);
     crate::storage_channel::init(&user_dir);
     crate::profiles_channel::init(&user_dir);
+    crate::workspaces_channel::init(&user_dir);
     crate::keyboard_channel::init();
     // Resolve the shell-integration scripts dir + product quality before
     // any localPty createProcess arrives.
@@ -276,6 +302,27 @@ fn build(app: &tauri::AppHandle) -> Value {
         "filesToNew": [],
         "userAgent": null,
         "zoomLevel": 0,
+
+        // Electron-main parity fields the renderer derives through
+        // environmentService (args = the configuration object itself):
+        //   * `builtin-extensions-dir` — builtinExtensionsPath. Without it,
+        //     the scanner falls back to FileAccess.asFileUri('').fsPath,
+        //     which under the Wind shim's document-origin file root resolves
+        //     to a RELATIVE "extensions" path and the whole system-extension
+        //     scan fails (FileNotFound for 'extensions').
+        //   * `logsPath` — logsHome; lets renderer.log / output channels
+        //     land in the per-session directory the shell just created.
+        "builtin-extensions-dir": client_root.join("extensions").to_string_lossy().replace('\\', "/"),
+        "logsPath": session_logs_dir.to_string_lossy().replace('\\', "/"),
+
+        // Parts splash: Electron main passes the persisted theme splash so
+        // workbench.js paints the shell skeleton synchronously (before the
+        // module graph finishes loading) — this is what makes real VS Code
+        // feel instant on cold boot. No persisted state exists yet, so ship
+        // the default dark_plus-shaped splash; the workbench swaps it for
+        // the real layout as soon as it renders (showSplash removes
+        // #monaco-parts-splash when the layout is ready).
+        "partsSplash": default_parts_splash(),
 
         // Shell-private metadata consumed by the preload shim (removed from
         // the contract surface; harmless extra key for the workbench).
@@ -424,5 +471,72 @@ fn uri_components(path: &Path) -> Value {
         "path": crate::util::encode_uri_path(&normalized),
         "query": "",
         "fragment": ""
+    })
+}
+
+/// `YYYYMMDDTHHMMSS` session stamp for the logs directory — the same shape
+/// electron-main's `logs/<date>` sessions use (toLocalISOString compacted).
+fn chrono_like_stamp(secs: u64) -> String {
+    let days = (secs / 86_400) as i64;
+    let secs_of_day = secs % 86_400;
+    let z = days + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z.rem_euclid(146_097);
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let y = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let day = doy - (153 * mp + 2) / 5 + 1;
+    let month = if mp < 10 { mp + 3 } else { mp - 9 };
+    let year = if month <= 2 { y + 1 } else { y };
+    format!(
+        "{:04}{:02}{:02}T{:02}{:02}{:02}",
+        year,
+        month,
+        day,
+        secs_of_day / 3600,
+        (secs_of_day % 3600) / 60,
+        secs_of_day % 60
+    )
+}
+
+/// Default dark_plus parts splash (IPartsSplash in themeService.ts) so
+/// workbench.js paints the classic shell skeleton — titlebar strip, activity
+/// bar, sidebar, editor region, statusbar — synchronously while the module
+/// graph streams in. Sizes match the workbench's classic-layout defaults;
+/// every touched color has the dark_plus value. The real workbench replaces
+/// this skeleton the moment the layout service renders.
+fn default_parts_splash() -> Value {
+    json!({
+        "baseTheme": "vs-dark",
+        "colorInfo": {
+            "background": "#1e1e1e",
+            "foreground": "#cccccc",
+            "editorBackground": "#1e1e1e",
+            "editorForeground": "#cccccc",
+            "activityBarBackground": "#333333",
+            "activityBarForeground": "#cccccc",
+            "titleBarBackground": "#3c3c3c",
+            "titleBarForeground": "#cccccc",
+            "statusBarBackground": "#007acc",
+            "statusBarForeground": "#ffffff",
+            "sideBarBackground": "#252526",
+            "sideBarForeground": "#cccccc",
+            "editorGroupBorder": "#444444",
+            "editorGroupHeaderTabsBorder": "#252526",
+            "panelBackground": "#1e1e1e"
+        },
+        "layoutInfo": {
+            "sideBarWidth": 300,
+            "sideBarSide": "left",
+            "titleBarHeight": 35,
+            "activityBarWidth": 48,
+            "auxiliaryBarWidth": 0,
+            "auxiliaryBarSide": "right",
+            "statusBarHeight": 22,
+            "editorPartMinWidth": 220,
+            "modernUI": false,
+            "modernUICompact": false
+        }
     })
 }

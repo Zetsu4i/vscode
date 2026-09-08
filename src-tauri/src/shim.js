@@ -66,6 +66,32 @@
 
   var CHANNEL_PREFIX = 'vscode:';
 
+  // Paint the dark editor background at document-start so the window is
+  // never WHITE while the module graph streams in. Electron gets this from
+  // the window's backgroundColor + partsSplash; WebView2 defaults to white
+  // and the workbench's own splash paint only happens after the window
+  // configuration resolves. #1e1e1e matches dark_plus editorBackground (and
+  // the partsSplash we ship in the window configuration).
+  // `documentElement` can be missing at document-created time in edge cases,
+  // so retry on a fast tick until it appears (always before first paint).
+  function paintDarkBackground() {
+    var el = document.documentElement;
+    if (el) {
+      el.style.backgroundColor = '#1e1e1e';
+      el.style.color = '#cccccc';
+      return true;
+    }
+    return false;
+  }
+  if (!paintDarkBackground()) {
+    var paintTries = 0;
+    var paintTimer = setInterval(function () {
+      if (paintDarkBackground() || ++paintTries > 400) {
+        clearInterval(paintTimer);
+      }
+    }, 5);
+  }
+
   // ---------------------------------------------------------------------------
   // Transport: lazy access to Tauri's core IPC. Tolerates initialization
   // ordering differences between WebView2 and wry script injection.
@@ -534,14 +560,34 @@
     if (typeof arg === 'string') {
       return arg;
     }
-    if (arg && arg.stack && typeof arg.stack === 'string') {
+    if (arg instanceof Error) {
+      return arg.stack || String(arg);
+    }
+    if (arg && typeof arg.stack === 'string') {
       return arg.stack;
     }
-    try {
-      return JSON.stringify(arg);
-    } catch (err) {
-      return String(arg);
+    if (typeof Event !== 'undefined' && arg instanceof Event) {
+      // Resource load failures reject with bare error Events; surface the
+      // target URL so protocol 404s are diagnosable from the shell log.
+      var target = arg.target;
+      var targetDesc = '?';
+      if (target) {
+        targetDesc = (target.src || target.href || (target.data && target.data.src))
+          ? String(target.src || target.href || target.data.src)
+          : (target.nodeName ? String(target.nodeName) : '?');
+      }
+      return 'Event(type=' + arg.type + ', target=' + targetDesc + ')';
     }
+    if (arg && typeof arg === 'object') {
+      var message = typeof arg.message === 'string' ? arg.message : '';
+      try {
+        var json = JSON.stringify(arg);
+        return message ? message + ' ' + json : (json || Object.prototype.toString.call(arg));
+      } catch (err) {
+        return message || Object.prototype.toString.call(arg);
+      }
+    }
+    return String(arg);
   }
 
   console.error = function () {
@@ -559,13 +605,14 @@
   };
 
   window.addEventListener('error', function (ev) {
-    console.error('[vstauri][window.onerror] ' + (ev.message || 'unknown error') +
-      ' @ ' + (ev.filename || '?') + ':' + (ev.lineno || 0) + ':' + (ev.colno || 0));
+    var detail = ev && ev.error && typeof ev.error.stack === 'string'
+      ? ev.error.stack
+      : (ev.message || 'unknown error') + ' @ ' + (ev.filename || '?') + ':' + (ev.lineno || 0) + ':' + (ev.colno || 0);
+    console.error('[vstauri][window.onerror] ' + detail);
   });
 
   window.addEventListener('unhandledrejection', function (ev) {
-    var reason = ev && ev.reason;
-    console.error('[vstauri][unhandledrejection] ' + (reason && reason.stack ? reason.stack : String(reason)));
+    console.error('[vstauri][unhandledrejection] ' + stringifyErrorArg(ev && ev.reason));
   });
 
   coreInvoke('vscode_log', {

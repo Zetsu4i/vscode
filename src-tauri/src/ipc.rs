@@ -448,6 +448,10 @@ fn route_channel_request(
         // userDataProfiles: profile CRUD over profiles.json
         ("userDataProfiles", _) => crate::profiles_channel::handle(command, arg),
 
+        // workspaces: IWorkspacesService — recent-workspace history (the
+        // welcome page / Open Recent menu) and workspace identifiers.
+        ("workspaces", _) => crate::workspaces_channel::handle(command, arg),
+
         // keyboardLayout: INativeKeyboardLayoutService
         ("keyboardLayout", _) => crate::keyboard_channel::handle(command, arg),
 
@@ -476,6 +480,11 @@ fn route_channel_request(
             "type": "disabled",
             "reason": 0 // DisablementReason.NotBuilt
         })),
+        // With updates disabled the current build is by definition the
+        // latest one; `isLatestVersion` feeds the update badge/no-op path.
+        ("update", "isLatestVersion") => Ok(json!(true)),
+        // setInternalOrg: enterprise update channel override — no-op.
+        ("update", "setInternalOrg") => Ok(Value::Null),
 
         // meteredConnection: desktop sessions are never metered (Electron
         // parity — the signal exists for browser sessions only).
@@ -485,6 +494,21 @@ fn route_channel_request(
         // the shell — NullNativeManagedSettingsService parity (empty data).
         ("nativeManagedSettings", "initialize")
         | ("nativeManagedSettings", "updatePolicyDefinitions") => Ok(json!({})),
+
+        // externalTerminal: IExternalTerminalService — the "Open in
+        // Terminal" command's platform defaults. Windows parity with
+        // DEFAULT_TERMINAL_WINDOWS ('Command Prompt').
+        ("externalTerminal", "getDefaultTerminalForPlatforms") => Ok(json!({
+            "windows": "Command Prompt",
+            "linux": "xterm",
+            "osx": "Terminal.app"
+        })),
+
+        // browserView: BrowserView management. `updateWindowConfiguration`
+        // is called once during BrowserViewWorkbenchService creation; a
+        // null answer keeps the service alive so its real consumers
+        // (webview-backed views) can land in a later phase.
+        ("browserView", "updateWindowConfiguration") => Ok(Value::Null),
 
         // Everything else is a faithful "channel not registered" rejection —
         // same outcome as Electron's 1s pending-request timeout, and the call

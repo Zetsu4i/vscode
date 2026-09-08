@@ -186,6 +186,46 @@ jobs:
         shell: bash
         run: echo "::notice::out/ restored from cache (src unchanged) — typecheck and compile skipped"; ls out | head -10
 
+      # ---------------------------------------------------------------------------
+      # PRODUCT client bundle (the startup-performance lever).
+      #
+      # The dev compile emits ~1000 individual ESM modules; the renderer
+      # fetched every one of them through the vscode-file protocol on boot
+      # (~1260 requests, 18-25s to first paint). The product esbuild bundle
+      # (`build/next/index.ts bundle --target desktop --minify --nls`)
+      # produces the exact minified, NLS-collected tree VS Code itself
+      # ships: workbench.desktop.main.js/.css as single bundles, the
+      # bootstrap entries, workers and Node mains (extension host, pty
+      # host, file watcher — ready for the Phase 7 sidecar). Boot then
+      # needs ~20 requests instead of ~1260.
+      # ---------------------------------------------------------------------------
+      - name: Restore bundled client cache
+        id: client-bundle-cache
+        uses: actions/cache@v4
+        with:
+          path: out-client
+          key: client-bundle-win-v1-${{ hashFiles('src/**', 'build/**', 'product.json', 'package.json', 'package-lock.json') }}
+
+      - name: Bundle product client (esbuild, minified, NLS)
+        if: steps.client-bundle-cache.outputs.cache-hit != 'true'
+        shell: bash
+        run: node build/next/index.ts bundle --out out-client --minify --nls --target desktop
+
+      - name: Save bundled client cache
+        if: steps.client-bundle-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: out-client
+          key: client-bundle-win-v1-${{ hashFiles('src/**', 'build/**', 'product.json', 'package.json', 'package-lock.json') }}
+
+      - name: Bundled client cache hit
+        if: steps.client-bundle-cache.outputs.cache-hit == 'true'
+        shell: bash
+        run: |
+          echo "::notice::out-client/ restored from cache (src unchanged) — bundle skipped"
+          test -f out-client/vs/workbench/workbench.desktop.main.js
+          test -f out-client/vs/code/electron-browser/workbench/workbench.js
+
       # codicon.ttf is copied into the source tree by build/lib/compilation.ts
       # during compile, but re-copy defensively when node_modules came from
       # cache (same guard upstream uses in gulpfile.editor.ts).
@@ -203,14 +243,23 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p staging
-          cp -r out staging/out
-          # Source maps are huge and not needed to boot the workbench.
+          # The PRODUCT tree: minified bundles + bootstrap entries + workers
+          # + Node mains + copied resources, straight from the esbuild
+          # bundle step. (The dev `out/` tree stays a build-time guard only.)
+          cp -r out-client staging/out
+          # Source maps are huge and not needed to boot the workbench;
+          # strip both the files and the sourceMappingURL comments so the
+          # webview never 404s them when devtools opens.
           find staging/out -name '*.map' -delete
+          find staging/out -name '*.js' -exec sed -i -E '/^[[:space:]]*(\/\/# sourceMappingURL=|\/\*# sourceMappingURL=)/d' {} +
 
           # Runtime node_modules the renderer fetches through the
           # vscode-file protocol (wasm/oniguruma, language detection,
-          # encoding). Anything missing beyond this list is a bug to fix in
-          # the ipc/404 logs, not a silent skip.
+          # encoding). The product bundle keeps these as external imports
+          # (esbuild `packages: 'external'`) resolved at runtime through the
+          # node_modules.asar URL form — protocol.rs maps that prefix onto
+          # this plain tree. Anything missing beyond this list is a bug to
+          # fix in the ipc/404 logs, not a silent skip.
           mkdir -p staging/node_modules/@vscode
           cp -r node_modules/vscode-oniguruma staging/node_modules/
           for pkg in vscode-regexp-languagedetection jschardet; do
@@ -220,14 +269,25 @@ jobs:
               echo "::warning::optional runtime module not installed: $pkg"
             fi
           done
-          if [ -d node_modules/@vscode/iconv-lite-umd ]; then
-            cp -r node_modules/@vscode/iconv-lite-umd staging/node_modules/@vscode/
-          else
-            echo "::warning::optional runtime module not installed: @vscode/iconv-lite-umd"
-          fi
+          # External renderer dependencies the product bundle resolves at
+          # runtime (observed as node_modules.asar 404s in the Phase 1 logs).
+          for pkg in @vscode/vscode-languagedetection @vscode/iconv-lite-umd @xterm/xterm @xterm/headless; do
+            if [ -d "node_modules/$pkg" ]; then
+              mkdir -p "staging/node_modules/$(dirname "$pkg")"
+              cp -r "node_modules/$pkg" "staging/node_modules/$pkg"
+            else
+              echo "::warning::optional runtime module not installed: $pkg"
+            fi
+          done
 
           # Static resources referenced by the workbench.
           cp -r resources staging/resources
+
+          # codicon.ttf: the product bundle emits the font as an esbuild
+          # asset (media/...); additionally keep the canonical path the
+          # smoke test asserts and the dev tree used.
+          mkdir -p staging/out/vs/base/browser/ui/codicons/codicon
+          cp node_modules/@vscode/codicons/dist/codicon.ttf staging/out/vs/base/browser/ui/codicons/codicon/codicon.ttf
 
           # Built-in (system) extensions — the "app extensions" Electron ships
           # under resources/app/extensions. Data-only ones (theme-defaults,
@@ -260,16 +320,14 @@ jobs:
           done
           shopt -u dotglob nullglob
 
-          # DEV-parity CSS loading: the dev compile does not bundle
-          # workbench.desktop.main.css (that is a production-build artifact).
-          # Dev mode instead ships configuration.cssModules — the sorted list
-          # of every out-relative css file — which setupCSSImportMaps() in
-          # workbench.ts turns into an import map + <link> loading (exactly
-          # what cssDevelopmentService.getCssModules() sends in dev Electron).
-          # The <link> in workbench.html still references the bundled css, so
-          # ship an empty placeholder to keep that request from 404ing.
+          # CSS: the product bundle ships the real workbench.desktop.main.css
+          # (the <link> in workbench.html loads it directly). css-modules.json
+          # stays for smoke-test parity and potential dev-parity boots.
           mkdir -p staging/out/vs/workbench
-          : > staging/out/vs/workbench/workbench.desktop.main.css
+          if [ ! -s staging/out/vs/workbench/workbench.desktop.main.css ]; then
+            echo "::warning::product css missing from bundle; shipping empty placeholder"
+            : > staging/out/vs/workbench/workbench.desktop.main.css
+          fi
           find staging/out -name '*.css' -type f | sed 's|^staging/out/||' | sort > staging/css-modules.txt
           node -e "const fs=require('fs');const m=fs.readFileSync('staging/css-modules.txt','utf8').split('\n').filter(Boolean);if(m.length===0){throw new Error('no css modules found under out/');}fs.writeFileSync('staging/css-modules.json',JSON.stringify(m));console.log('css-modules.json:',m.length,'modules');"
           rm staging/css-modules.txt
@@ -278,12 +336,10 @@ jobs:
           # served into the window configuration (same shape the Electron
           # main process injects).
           #
-          # NLS: the DEV compile (compileTask('src','out',false)) does NOT emit
-          # out/nls.messages.{js,json} — it keeps English strings inline in
-          # the modules (src/vs/nls.ts localize falls back to the literal
-          # message, and lookupMessage falls back to the inline default).
-          # So: use the file when a build produced one, otherwise ship an
-          # empty array and rely on the inline English defaults.
+          # NLS: the product bundle (--nls) emits out-client/nls.messages.json
+          # (message placeholders replaced with null + collected indices).
+          # Fall back to the dev out/ copies, then to an empty array (dev
+          # compile keeps English strings inline — src/vs/nls.ts fallback).
           node <<'NODE'
           const fs = require('fs');
           const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
@@ -294,7 +350,11 @@ jobs:
           fs.writeFileSync('staging/product.json', JSON.stringify(prod, null, 2));
 
           let messages = null;
-          if (fs.existsSync('out/nls.messages.json')) {
+          if (fs.existsSync('out-client/nls.messages.json')) {
+            const parsed = JSON.parse(fs.readFileSync('out-client/nls.messages.json', 'utf8'));
+            if (Array.isArray(parsed)) { messages = parsed; }
+          }
+          if (!messages && fs.existsSync('out/nls.messages.json')) {
             const parsed = JSON.parse(fs.readFileSync('out/nls.messages.json', 'utf8'));
             if (Array.isArray(parsed)) { messages = parsed; }
           }

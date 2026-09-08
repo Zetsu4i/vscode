@@ -19,6 +19,9 @@ notify = "8"
 portable-pty = "0.9.0"
 tauri-plugin-dialog = "2"
 tauri-plugin-clipboard-manager = "2"
+# protocol.rs serves the workbench module graph with Content-Encoding: gzip
+# (bodies are compressed once on cold read and cached — see protocol.rs).
+flate2 = "1"
 windows-sys = { version = "0.60", features = ["Win32_UI_Controls", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging", "Win32_Foundation"] }
 image = { version = "0.25", default-features = false, features = ["png"] }
 

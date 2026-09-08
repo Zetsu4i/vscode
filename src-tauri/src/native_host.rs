@@ -254,6 +254,24 @@ pub fn handle(app: Option<&tauri::AppHandle>, command: &str, arg: &Value) -> Res
             Ok(Value::Null)
         }
 
+        // windowsGetStringRegKey(root, key, value): optional Windows
+        // registry string lookup (default app handlers / OS integration).
+        // Electron returns `undefined` when the key is absent; a null answer
+        // matches that "not configured" state without a registry dependency.
+        "windowsGetStringRegKey" => Ok(Value::Null),
+
+        // openAgentsWindow: VS Code's dedicated agent-session window. The
+        // shell is single-window in this phase; answer like Electron does
+        // for a window that opened off-screen-less: void, with a shell log
+        // marking it as pending the multi-window phase.
+        "openAgentsWindow" => {
+            crate::logger::log_app(
+                "info",
+                "nativeHost: openAgentsWindow requested (multi-window lands with the auxiliary-window phase — treated as no-op)",
+            );
+            Ok(Value::Null)
+        }
+
         other => Err(format!(
             "nativeHost channel: method not found: {} (see compat/ipc-contract.md for the full surface)",
             other

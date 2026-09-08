@@ -303,6 +303,26 @@ Replace Electron main process basics with Tauri/Rust services.
 - [x] Implement `keyboardLayout` protocol channel (getKeyboardLayoutData with
       a real US-layout Windows mapping + onDidChangeKeyboardLayout event) —
       `src-tauri/src/keyboard_channel.rs`
+- [x] Implement `workspaces` protocol channel (IWorkspacesService: recent
+      history over `<dataRoot>/recent.json` with MRU merge/removal, upstream
+      md5 workspace identifiers, untitled-workspace create/delete,
+      enterWorkspace/getDirtyWorkspaces) — `src-tauri/src/workspaces_channel.rs`;
+      kills the noisiest boot rejection family (`getRecentlyOpened`, called
+      by the welcome page and Open Recent within the first seconds)
+- [x] Boot-error sweep from the first working runtime log: window config now
+      carries `builtin-extensions-dir` (fixes `Error scanning system
+      extensions: FileNotFound for 'extensions'` — the scanner's fallback
+      derived a RELATIVE path through the shim's document-origin file root)
+      and `logsPath` (renderer.log/output channels land in the per-session
+      `logs/<stamp>/window1` tree the shell pre-creates); the profile
+      sub-dirs (globalStorage/snippets/prompts/extensions) are pre-created
+      like Electron's first boot; `update.isLatestVersion` /
+      `update.setInternalOrg`, `externalTerminal.getDefaultTerminalForPlatforms`,
+      `browserView.updateWindowConfiguration`,
+      `nativeHost.windowsGetStringRegKey` and a graceful `openAgentsWindow`
+      answer natively; the shim serializes unhandled rejections properly
+      (stacks, Event target URLs — the previous `[object Object]` /
+      `[object Event]` lines hid the actual failures)
 - [ ] Credential storage: replace `keytar`-style secret storage with the Rust
       `keyring` crate behind the `encryption`/secret channels (Windows
       Credential Manager under the hood)
@@ -618,7 +638,7 @@ Systematically remove Electron main process code after full verification.
 
 ## Phase 11: Release Engineering and Optimization
 
-### Status: ⬜ Not started
+### Status: 🟦 In progress (startup performance landed; release hardening next)
 
 ### Goal
 
@@ -627,11 +647,47 @@ Harden release flow and optimize for Windows.
 ### Tasks
 
 - [ ] Signed NSIS installer
-- [ ] Automatic GitHub release on successful build
+- [x] Automatic GitHub release on successful build
 - [ ] Updater integration if applicable
 - [ ] Performance profiling
 - [ ] Memory profiling
-- [ ] Reduce startup time
+- [x] Reduce startup time — the 30-second blank-window boot is fixed by a
+      three-part change measured from a user runtime log (window opens at
+      +7.3s, `renderer connected` at +25.4s, first paint after ~30s with
+      ~1260 protocol requests):
+      1. **Product client bundle** (the decisive lever): CI now runs the
+         upstream esbuild bundler
+         (`node build/next/index.ts bundle --out out-client --minify --nls
+         --target desktop`) and stages `out-client/` instead of the dev
+         compile. Boot goes from ~1260 individual ESM module fetches to
+         ~6 requests (workbench.html, workbench.js, the 19.7 MiB
+         self-contained `workbench.desktop.main.js`, its 1.5 MiB CSS, NLS
+         and runtime node_modules). The bootstrap keeps the
+         `VSCODE_DEV`+`_VSCODE_USE_RELATIVE_IMPORTS` document-relative
+         import branch, so the Wind shim boot works unchanged against the
+         product bundle (validated: zero static imports survive bundling —
+         see scripts/validate_bundle_shape.cjs in the agent workspace).
+         The bundle output additionally contains the Node mains
+         (extensionHostProcess, ptyHostMain, watcherMain, sharedProcessMain)
+         that Phase 7 will execute as the sidecar.
+      2. **Protocol fast path** (`src-tauri/src/protocol.rs`): the client
+         root is canonicalized once (was two `fs::canonicalize` syscalls
+         per request), served bodies are cached in memory as
+         `Arc<CachedBody>` (raw + pre-compressed gzip, 384 MiB budget,
+         oldest-quarter eviction) so hot requests copy a pointer and never
+         touch the filesystem, compressible responses >1 KiB are served
+         with `Content-Encoding: gzip`, every response carries a strong
+         ETag with `Cache-Control: no-cache` (repeat boots revalidate with
+         304s; an app update can never serve stale modules), and
+         `node_modules.asar/...` URLs (the product runtime's external
+         import form) map onto the bundled plain `node_modules/` tree.
+      3. **Instant perceived paint**: the shim paints the dark editor
+         background at document-start (WebView2 defaults to white), and the
+         window configuration now ships a default dark_plus
+         `partsSplash` + `layoutInfo` so workbench.js draws the shell
+         skeleton (titlebar/activity bar/sidebar/statusbar) synchronously
+         after the config handshake — the same mechanism Electron main
+         uses — while the bundle streams in.
 - [ ] User-facing changelog generation
 
 ### Acceptance
@@ -639,3 +695,7 @@ Harden release flow and optimize for Windows.
 - [ ] NSIS installer released automatically
 - [ ] Release notes present
 - [ ] Installer works on clean Windows VM
+- [ ] Cold boot: window shows the dark splash skeleton within ~1s of the
+      WebView2 environment being up; the full workbench renders from the
+      product bundle in low single-digit seconds (log markers:
+      `main window created` → `renderer connected`)
