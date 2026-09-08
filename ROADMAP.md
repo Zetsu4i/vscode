@@ -335,6 +335,15 @@ Replace Electron main process basics with Tauri/Rust services.
       Windows in the next build round)
 - [ ] Window title, size, and fullscreen work (title/size/fullscreen
       already answer; multi-window lifecycle pending)
+- [ ] Auxiliary/multi windows: the workbench opens auxiliary windows
+      (settings, diff editors, agents) through `mainWindow.open('about:blank',
+      popup-features)`; Electron intercepts this in the main process
+      (setWindowOpenHandler → native window with the workbench URL). The
+      Wind layer needs a `window.open` replacement that asks Mountain to
+      create a real second WebviewWindow (same workbench URL + shim
+      initialization script, per-window configuration with its own windowId
+      + the `vscode:registerAuxiliaryWindow` handshake), because WebView2
+      browser-managed popups never receive the preload shim.
 - [x] Clipboard copy/paste works (text + images; custom formats pending)
 - [ ] Settings persist after restart (disk-backed by construction; needs a
       Windows restart round-trip to confirm end-to-end)
