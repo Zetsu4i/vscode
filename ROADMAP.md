@@ -159,6 +159,15 @@ Known-good verification: `cargo check --target x86_64-pc-windows-msvc`
 clean in the agent workspace (llvm-rc cross resource compile); the Linux
 host check requires GTK dev libs and is covered by CI instead.
 
+CI outcome: dev build 36 (commit 5a158f28, 2026-09-09) — all three jobs
+green, smoke report asserts the full bundle incl. node runtime, copilot
+dist, xterm addons and the sidecar wrapper. One CI iteration was needed:
+copilot initially traveled inside the client artifact (365MB → flaky
+cross-job blob download); it now rides the GitHub cache and is staged
+into resources/client in the bundle job. NEXT for the user: install the
+build, exercise terminal / hot exit / agents window / multi-window, and
+share `vstauri.log` — the extension host boot is the next debug surface.
+
 ---
 
 ## Phase 0: Repository Baseline and Guardrails
