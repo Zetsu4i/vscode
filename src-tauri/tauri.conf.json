@@ -1,8 +1,9 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Visual Studio Code",
+  "productName": "VSTauri",
   "version": "1.138.0",
   "identifier": "com.zetsu4i.vstauri",
+  "mainBinaryName": "VSTauri",
   "build": {
     "frontendDist": "frontend"
   },
@@ -17,6 +18,12 @@
     "active": true,
     "targets": ["nsis"],
     "icon": ["icons/code.ico"],
-    "resources": ["resources/client/**/*"]
+    "publisher": "Mouri Younes",
+    "resources": ["resources/client/**/*", "resources/node/**/*"],
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser"
+      }
+    }
   }
 }

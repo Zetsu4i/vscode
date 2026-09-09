@@ -1,8 +1,8 @@
 [package]
 name = "vstauri"
 version = "1.138.0"
-description = "Visual Studio Code - Tauri v2 native shell (Phase 1: workbench renderer via vscode-file:// custom protocol)"
-authors = ["Zetsu4i"]
+description = "VSTauri - Visual Studio Code workbench in a Tauri v2 native shell (Wind & Mountain)"
+authors = ["Mouri Younes"]
 license = "MIT"
 edition = "2021"
 
@@ -24,6 +24,18 @@ tauri-plugin-clipboard-manager = "2"
 flate2 = "1"
 windows-sys = { version = "0.60", features = ["Win32_UI_Controls", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging", "Win32_Foundation"] }
 image = { version = "0.25", default-features = false, features = ["png"] }
+# Multi-window auxiliary windows: WebView2's NewWindowRequested COM event
+# (windows.rs). Direct deps so the COM handler code can name the crates:
+#   * webview2-com 0.38 — the ICoreWebView2* interfaces (exact version
+#     tauri/wry resolve, so all trait impls line up).
+#   * windows-core + windows 0.61 — the #[implement] vtable macro emits
+#     code referencing the `windows_core` crate root, so it must be a
+#     direct dependency (the `windows` crate re-exports it as `core`).
+#     0.61 has no "implement" cargo feature — the macro is always compiled
+#     in via windows-core's non-optional windows-implement dependency.
+webview2-com = "0.38"
+windows-core = "0.61"
+windows = { version = "0.61" }
 
 [profile.release]
 # Keep default release settings; build speed matters for CI iteration.

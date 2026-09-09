@@ -113,6 +113,14 @@ pub fn handle(app: Option<&tauri::AppHandle>, command: &str, arg: &Value) -> Res
         // ---- app lifecycle ----
         "notifyReady" => {
             crate::logger::log_app("info", "nativeHost: renderer notified ready");
+            // Hide the boot loading screen — the workbench has painted.
+            if let Some(app) = app {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.eval(
+                        "(window.__VSTAURI_HIDE_SPLASH__||function(){})();",
+                    );
+                }
+            }
             Ok(Value::Null)
         }
         "relaunch" => {
@@ -187,11 +195,36 @@ pub fn handle(app: Option<&tauri::AppHandle>, command: &str, arg: &Value) -> Res
         "pickWorkspaceAndOpen" => pick_and_open(app, args.get(1), PickKind::Workspace),
         "pickFileFolderAndOpen" => pick_and_open(app, args.get(1), PickKind::FileOrFolder),
         "openWindow" => {
-            // openWindow(toOpen: IWindowOpenable[], options?) | openWindow(opts?)
-            // — ProxyChannel passes [windowId, toOpen, options]. The array
-            // form carries the openables; the single-object form opens an
-            // empty window (reload as a clean boot here).
+            // openWindow(toOpen: IWindowOpenable[], options?) — ProxyChannel
+            // passes [windowId, toOpen, options]. `forceNewWindow` opens a
+            // real second workbench window (multi-window); otherwise the
+            // openables land in this window and it reloads.
             let to_open = args.get(1).and_then(Value::as_array).cloned().unwrap_or_default();
+            let force_new = args
+                .get(2)
+                .and_then(Value::as_object)
+                .and_then(|opts| opts.get("forceNewWindow"))
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+            if force_new {
+                if let Some(app) = app {
+                    match crate::windows::open_workbench_window(app, &to_open, false) {
+                        Ok(label) => {
+                            crate::logger::log_app(
+                                "info",
+                                &format!("nativeHost: opened new workbench window '{}'", label),
+                            );
+                        }
+                        Err(err) => {
+                            crate::logger::log_app(
+                                "error",
+                                &format!("nativeHost: openWindow failed: {}", err),
+                            );
+                        }
+                    }
+                    return Ok(Value::Null);
+                }
+            }
             let changed = crate::config::apply_window_openables(&to_open);
             if changed {
                 reload_window(app);
@@ -250,9 +283,15 @@ pub fn handle(app: Option<&tauri::AppHandle>, command: &str, arg: &Value) -> Res
         | "moveWindowTabToNewWindow" | "mergeAllWindowTabs" | "toggleWindowTabsBar"
         | "updateTouchBar" | "installShellCommand" | "uninstallShellCommand"
         | "openGPUInfoWindow" | "openContentTracingWindow" | "stopTracing"
-        | "openDevToolsWindow" | "triggerPaste" | "syncSystemWideKeybindings" => {
+        | "openDevToolsWindow" | "triggerPaste" => {
             Ok(Value::Null)
         }
+
+        // syncSystemWideKeybindings: the renderer reads `.failed` off the
+        // result — answer with the empty-failure shape Electron's
+        // GlobalKeybindingsMainService returns (previously null, which
+        // crashed pushToMainProcess with `Cannot read properties of null`).
+        "syncSystemWideKeybindings" => Ok(json!({ "failed": [] })),
 
         // windowsGetStringRegKey(root, key, value): optional Windows
         // registry string lookup (default app handlers / OS integration).
@@ -260,15 +299,27 @@ pub fn handle(app: Option<&tauri::AppHandle>, command: &str, arg: &Value) -> Res
         // matches that "not configured" state without a registry dependency.
         "windowsGetStringRegKey" => Ok(Value::Null),
 
-        // openAgentsWindow: VS Code's dedicated agent-session window. The
-        // shell is single-window in this phase; answer like Electron does
-        // for a window that opened off-screen-less: void, with a shell log
-        // marking it as pending the multi-window phase.
+        // openAgentsWindow: VS Code's dedicated agent-session window. A full
+        // second workbench window booting with the shared agent-sessions
+        // workspace, the agents profile and isSessionsWindow=true
+        // (windowsMainService.openAgentsWindow parity).
         "openAgentsWindow" => {
-            crate::logger::log_app(
-                "info",
-                "nativeHost: openAgentsWindow requested (multi-window lands with the auxiliary-window phase — treated as no-op)",
-            );
+            if let Some(app) = app {
+                match crate::windows::open_workbench_window(app, &[], true) {
+                    Ok(label) => {
+                        crate::logger::log_app(
+                            "info",
+                            &format!("nativeHost: agents window '{}' opened", label),
+                        );
+                    }
+                    Err(err) => {
+                        crate::logger::log_app(
+                            "error",
+                            &format!("nativeHost: openAgentsWindow failed: {}", err),
+                        );
+                    }
+                }
+            }
             Ok(Value::Null)
         }
 

@@ -19,6 +19,11 @@
  *   window.vscode.webUtils        getPathForFile (limited: WebView2 has no
  *                                 File.path, same as any Chromium browser)
  *
+ * Boot splash: the window.__VSTAURI_BOOT__ payload (injected right after
+ *   this shim) drives a branded, OS-theme-aware "Starting…" loading screen
+ *   (name, version, "by Mouri Younes") that replaces VS Code's fake
+ *   partsSplash skeleton; it is removed when the real workbench renders.
+ *
  * Transport: every ipcRenderer call is forwarded to the Rust backend through
  * Tauri's core IPC (window.__TAURI_INTERNALS__.invoke) with the original
  * `vscode:`-prefixed channel names preserved. The `vscode:message` main-
@@ -66,31 +71,162 @@
 
   var CHANNEL_PREFIX = 'vscode:';
 
-  // Paint the dark editor background at document-start so the window is
-  // never WHITE while the module graph streams in. Electron gets this from
-  // the window's backgroundColor + partsSplash; WebView2 defaults to white
-  // and the workbench's own splash paint only happens after the window
-  // configuration resolves. #1e1e1e matches dark_plus editorBackground (and
-  // the partsSplash we ship in the window configuration).
-  // `documentElement` can be missing at document-created time in edge cases,
-  // so retry on a fast tick until it appears (always before first paint).
-  function paintDarkBackground() {
-    var el = document.documentElement;
-    if (el) {
-      el.style.backgroundColor = '#1e1e1e';
-      el.style.color = '#cccccc';
-      return true;
+  // ---------------------------------------------------------------------------
+  // Boot splash — the branded "Starting…" loading screen.
+  // ---------------------------------------------------------------------------
+  // The window boot payload (`window.__VSTAURI_BOOT__`, injected as the
+  // initialization script immediately AFTER this shim) carries the OS-theme
+  // colors (Windows AppsUseLightTheme/SystemUsesLightTheme + high contrast —
+  // see config.rs detect_theme) and the product branding. That script calls
+  // `window.__VSTAURI_BOOT_READY__()` the moment the payload is assigned, so
+  // the splash paints before any document content exists.
+  //
+  // This replaces the old behavior of a hard-coded dark paint: the window
+  // now opens in the DETECTED theme colors (light users get a light window)
+  // and shows "VSTauri / Version / by Mouri Younes / Starting…" instead of
+  // a fake workbench skeleton (config.rs ships partsSplash without
+  // layoutInfo, so workbench.js only applies the background color).
+  //
+  // The overlay removes itself when the real workbench titlebar renders
+  // (titlebarObserver below) — or after 30s as a safety valve.
+  var SPLASH_ID = 'vstauri-boot-splash';
+  var splashPainted = false;
+  var splashRemoved = false;
+
+  function removeBootSplash() {
+    if (splashRemoved) {
+      return;
     }
-    return false;
-  }
-  if (!paintDarkBackground()) {
-    var paintTries = 0;
-    var paintTimer = setInterval(function () {
-      if (paintDarkBackground() || ++paintTries > 400) {
-        clearInterval(paintTimer);
+    splashRemoved = true;
+    var overlay = document.getElementById(SPLASH_ID);
+    if (!overlay) {
+      return;
+    }
+    // Short fade so the handover to the real workbench is not a hard cut.
+    overlay.style.transition = 'opacity 160ms ease-out';
+    overlay.style.opacity = '0';
+    setTimeout(function () {
+      if (overlay.parentNode) {
+        overlay.parentNode.removeChild(overlay);
       }
-    }, 5);
+    }, 180);
   }
+
+  function renderBootSplash() {
+    if (splashPainted) {
+      return;
+    }
+    var boot = window.__VSTAURI_BOOT__ || {};
+    var theme = boot.theme || { dark: true, background: '#1e1e1e', foreground: '#cccccc', accent: '#007acc' };
+    var product = boot.product || {};
+    var el = document.documentElement;
+    if (!el || !document.body) {
+      // document-created edge case: retry on a fast tick until the document
+      // exists (always before first paint).
+      return false;
+    }
+    splashPainted = true;
+
+    // Document-start theme paint (never WHITE in light mode, never dark in
+    // light mode — matches the final workbench theme).
+    el.style.backgroundColor = theme.background;
+    el.style.color = theme.foreground;
+
+    var overlay = document.createElement('div');
+    overlay.id = SPLASH_ID;
+    overlay.setAttribute('aria-hidden', 'true');
+    var dim = theme.dark ? 'rgba(255,255,255,0.55)' : 'rgba(60,60,60,0.55)';
+    var style = overlay.style;
+    style.position = 'fixed';
+    style.left = '0';
+    style.top = '0';
+    style.width = '100vw';
+    style.height = '100vh';
+    style.margin = '0';
+    style.zIndex = '2147483647';
+    style.background = theme.background;
+    style.color = theme.foreground;
+    style.display = 'flex';
+    style.flexDirection = 'column';
+    style.alignItems = 'center';
+    style.justifyContent = 'center';
+    style.gap = '14px';
+    style.fontFamily = '"Segoe UI", "Segoe UI Variable Text", -apple-system, "Helvetica Neue", sans-serif';
+    style.webkitFontSmoothing = 'antialiased';
+    style.cursor = 'default';
+    style.userSelect = 'none';
+
+    // Wordmark
+    var name = document.createElement('div');
+    name.textContent = product.nameLong || 'VSTauri';
+    name.style.fontSize = '38px';
+    name.style.fontWeight = '200';
+    name.style.letterSpacing = '0.5px';
+    name.style.lineHeight = '1';
+    overlay.appendChild(name);
+
+    // Version + attribution
+    var meta = document.createElement('div');
+    var versionText = product.version ? 'Version ' + product.version : '';
+    var byText = product.by ? 'by ' + product.by : '';
+    meta.textContent = [versionText, byText].filter(Boolean).join(' · ');
+    meta.style.fontSize = '13px';
+    meta.style.color = dim;
+    overlay.appendChild(meta);
+
+    // Indeterminate progress bar (accent color, VS Code blue by default).
+    var barWrap = document.createElement('div');
+    barWrap.style.cssText = 'width:160px;height:2px;border-radius:1px;overflow:hidden;margin-top:14px;background:' + (theme.dark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.12)') + ';';
+    var bar = document.createElement('div');
+    bar.style.cssText = 'height:100%;width:40%;border-radius:1px;background:' + (theme.accent || '#007acc') + ';';
+    var styleEl = document.createElement('style');
+    styleEl.textContent = '@' + 'keyframes vstauri-boot-slide{0%{transform:translateX(-100%)}100%{transform:translateX(400%)}}';
+    bar.style.animation = 'vstauri-boot-slide 1.4s ease-in-out infinite';
+    barWrap.appendChild(bar);
+    overlay.appendChild(styleEl);
+    overlay.appendChild(barWrap);
+
+    // Status line
+    var starting = document.createElement('div');
+    starting.textContent = 'Starting…';
+    starting.style.fontSize = '13px';
+    starting.style.color = dim;
+    starting.style.marginTop = '2px';
+    overlay.appendChild(starting);
+
+    document.body.appendChild(overlay);
+
+    // Safety valve: never keep the splash up forever if the workbench fails
+    // to render (the renderer error log is the diagnostic surface then).
+    setTimeout(removeBootSplash, 30000);
+    return true;
+  }
+
+  // Called by the boot initialization script right after it assigns
+  // `window.__VSTAURI_BOOT__` (both scripts run before page scripts).
+  window.__VSTAURI_BOOT_READY__ = function () {
+    if (!renderBootSplash()) {
+      var tries = 0;
+      var timer = setInterval(function () {
+        if (renderBootSplash() || ++tries > 400) {
+          clearInterval(timer);
+        }
+      }, 5);
+    }
+  };
+
+  // Fallback: if the boot script never ran (defensive — it always ships with
+  // the shim), paint with built-in dark defaults so the window is never
+  // white while the module graph streams in.
+  setTimeout(function () {
+    if (!splashPainted) {
+      var el = document.documentElement;
+      if (el) {
+        el.style.backgroundColor = '#1e1e1e';
+        el.style.color = '#cccccc';
+      }
+    }
+  }, 120);
 
   // ---------------------------------------------------------------------------
   // Transport: lazy access to Tauri's core IPC. Tolerates initialization
@@ -546,9 +682,22 @@
       window.__VSTAURI_TITLEBAR_READY__ = true;
       wireTitlebar(root);
       titlebarObserver.disconnect();
+      // The real workbench chrome is live — retire the boot splash.
+      removeBootSplash();
     }
   });
   titlebarObserver.observe(document, { childList: true, subtree: true });
+
+  // Secondary trigger: any real workbench layout root also retires the
+  // splash (auxiliary editor windows may render before their titlebar, and
+  // plain-editor popups have no titlebar at all).
+  var workbenchRootObserver = new MutationObserver(function () {
+    if (document.querySelector('.monaco-workbench')) {
+      removeBootSplash();
+      workbenchRootObserver.disconnect();
+    }
+  });
+  workbenchRootObserver.observe(document, { childList: true, subtree: true });
 
   // ---------------------------------------------------------------------------
   // Diagnostics: forward renderer errors to the Rust log so headless

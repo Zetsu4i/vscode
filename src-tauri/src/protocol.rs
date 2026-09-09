@@ -231,6 +231,15 @@ pub fn serve(app: &tauri::AppHandle, request: Request<Vec<u8>>) -> Response<Vec<
         return text_response(StatusCode::NOT_FOUND, "client bundle not found");
     }
 
+    // The auxiliary-window blank document: `window.open` popups (WebView2
+    // NewWindowRequested) navigate here. Same origin as the workbench so
+    // the parent's cross-window DOM access works exactly like Electron's
+    // about:blank popups. The shim's initialization script runs first.
+    if decoded == "/vstauri-aux" {
+        trace_request(&method, &raw_path, 200);
+        return text_response(StatusCode::OK, AUX_DOCUMENT);
+    }
+
     // CSS is requested in two different roles (mirrors Electron dev, where
     // the cssModules import map turns every `import './x.css'` into a blob
     // module that injects a <link>):
@@ -476,13 +485,19 @@ fn product_mode_boot_bytes(mapped: &str, bytes: Vec<u8>) -> Vec<u8> {
     out
 }
 
-/// `node_modules.asar/<pkg>` → `node_modules/<pkg>` (we ship the plain tree).
+/// `node_modules.asar/<pkg>` → `node_modules/<pkg>` and
+/// `node_modules.asar.unpacked/<pkg>` → `node_modules/<pkg>` (we ship the
+/// plain tree; Electron loads native modules/wasm from the .unpacked side
+/// of the archive — e.g. vscode-oniguruma's onig.wasm).
 fn normalize_asar(rel: &str) -> String {
-    if rel.contains("node_modules.asar/") {
-        rel.replace("node_modules.asar/", "node_modules/")
-    } else {
-        rel.to_string()
+    let mut mapped = rel.to_string();
+    if mapped.contains("node_modules.asar.unpacked/") {
+        mapped = mapped.replace("node_modules.asar.unpacked/", "node_modules/");
     }
+    if mapped.contains("node_modules.asar/") {
+        mapped = mapped.replace("node_modules.asar/", "node_modules/");
+    }
+    mapped
 }
 
 /// Map a decoded request path onto a path relative to the client root.
@@ -722,3 +737,9 @@ mod tests {
         assert_eq!(product_mode_boot_bytes("out/vs/base/common/lifecycle.js", vec![1, 2, 3]), vec![1, 2, 3]);
     }
 }
+
+/// The blank document served for auxiliary windows (`/vstauri-aux`).
+/// Deliberately minimal: the workbench's AuxiliaryWindowService builds the
+/// DOM itself; the shim initialization script (AddScriptToExecuteOnDocument)
+/// provides `window.vscode`.
+const AUX_DOCUMENT: &str = "<!DOCTYPE html><html><head><meta charset=\"utf-8\"></head><body></body></html>";

@@ -235,6 +235,62 @@ jobs:
           test -f out-client/vs/workbench/workbench.desktop.main.js
           test -f out-client/vs/code/electron-browser/workbench/workbench.js
 
+      # -------------------------------------------------------------------
+      # Copilot extension (AI provider bring-up).
+      #
+      # The built-in GitHub Copilot Chat extension carries the BYOK
+      # language-model providers (extensions/copilot/src/extension/byok/
+      # vscode-node/*Provider.ts — vendors: openai, anthropic, gemini, ollama,
+      # openrouter, azure, xai, customoai [custom OpenAI base URL + key],
+      # customendpoint). Its dist/ is gitignored and only this esbuild step
+      # produces it. Shipping it + the Phase 7 node sidecar is what makes the
+      # in-editor "manage models / connect provider" surface functional
+      # WITHOUT any GitHub/Google sign-in: the user picks "Custom OpenAI
+      # compatible", points it at their api base, pastes the key (stored
+      # encrypted through the Mountain `encryption` channel), and the model
+      # list is fetched from the provider's /v1/models endpoint.
+      # -------------------------------------------------------------------
+      - name: Restore copilot build cache
+        id: copilot-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            extensions/copilot/dist
+            extensions/copilot/node_modules
+          key: copilot-dist-win-v2-${{ hashFiles('extensions/copilot/src/**', 'extensions/copilot/package.json', 'extensions/copilot/package-lock.json', 'extensions/copilot/.esbuild.mts') }}
+
+      - name: Build copilot extension (BYOK AI providers)
+        if: steps.copilot-cache.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm --prefix extensions/copilot ci
+          npm --prefix extensions/copilot run build
+          # Dev-only tooling out of the shipped tree (esbuild, tsx, tsc...):
+          # prune to production runtime deps, the set upstream ships. The
+          # dist bundle keeps @github/copilot (the CLI/SDK with its
+          # win32-x64 binaries), node-pty and friends EXTERNAL, so the
+          # pruned node_modules is a runtime requirement, not dead weight.
+          npm --prefix extensions/copilot prune --omit=dev
+
+      - name: Save copilot build cache
+        if: steps.copilot-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            extensions/copilot/dist
+            extensions/copilot/node_modules
+          key: copilot-dist-win-v2-${{ hashFiles('extensions/copilot/src/**', 'extensions/copilot/package.json', 'extensions/copilot/package-lock.json', 'extensions/copilot/.esbuild.mts') }}
+
+      - name: Copilot cache hit
+        if: steps.copilot-cache.outputs.cache-hit == 'true'
+        shell: bash
+        run: |
+          echo "::notice::copilot dist/ restored from cache"
+          test -f extensions/copilot/dist/extension.js
+          test -d extensions/copilot/node_modules/@github/copilot
+          echo "copilot node_modules size:"; du -sh extensions/copilot/node_modules
+
       # codicon.ttf is copied into the source tree by build/lib/compilation.ts
       # during compile, but re-copy defensively when node_modules came from
       # cache (same guard upstream uses in gulpfile.editor.ts).
@@ -280,7 +336,19 @@ jobs:
           done
           # External renderer dependencies the product bundle resolves at
           # runtime (observed as node_modules.asar 404s in the Phase 1 logs).
-          for pkg in @vscode/vscode-languagedetection @vscode/iconv-lite-umd @xterm/xterm @xterm/headless; do
+          # The FULL @xterm family is required: the integrated terminal's
+          # renderer dynamically imports the addons (webgl/unicode11/
+          # progress/clipboard/search/serialize/...) as
+          # node_modules.asar/@xterm/addon-*/lib/*.js — the first Windows
+          # runtime log showed those 404ing, which broke the terminal panel
+          # before a single PTY byte could render. vscode-textmate feeds the
+          # textmate tokenization worker bootstrap.
+          for pkg in @vscode/vscode-languagedetection @vscode/iconv-lite-umd \
+                     @xterm/xterm @xterm/headless @xterm/addon-webgl \
+                     @xterm/addon-unicode11 @xterm/addon-progress \
+                     @xterm/addon-clipboard @xterm/addon-search \
+                     @xterm/addon-serialize @xterm/addon-ligatures \
+                     @xterm/addon-image vscode-textmate; do
             if [ -d "node_modules/$pkg" ]; then
               mkdir -p "staging/node_modules/$(dirname "$pkg")"
               cp -r "node_modules/$pkg" "staging/node_modules/$pkg"
@@ -300,26 +368,49 @@ jobs:
 
           # Built-in (system) extensions — the "app extensions" Electron ships
           # under resources/app/extensions. Data-only ones (theme-defaults,
-          # language grammars, keymaps: 61 of 96) work through the
-          # localFilesystem channel immediately and give the workbench its
-          # default themes/colors; code extensions are scanned and listed but
-          # stay inactive until the extension host lands (Phase 7). Test
-          # fixture extensions (*-tests) are excluded like the product build.
-          # copilot is excluded too: its dist/ is gitignored (built by
-          # compile-copilot, which this pipeline does not run), so it is
-          # ~62MB of dead weight until the Phase 7 sidecar ships it.
+          # language grammars, keymaps) work through the localFilesystem
+          # channel immediately and give the workbench its default
+          # themes/colors; code extensions are scanned and listed but stay
+          # inactive until the extension host sidecar runs them (Phase 7 —
+          # the node runtime now ships in resources/node, so the sidecar
+          # manager can actually spawn extensionHostProcess). Test fixture
+          # extensions (*-tests) are excluded like the product build.
           #
-          # CRITICAL: per-extension node_modules must NOT be staged. The
-          # node_modules cache (listNodeModules.ts) includes every
-          # extensions/*/node_modules in the repo (~130k files / ~800MB) —
-          # copying them into the bundle ballooned the artifact to 1GB and
+          # copilot IS staged (built above): it carries the BYOK AI
+          # providers (openai/anthropic/gemini/ollama/openrouter/azure/xai/
+          # customoai/customendpoint — custom OpenAI base URL + key, model
+          # list from /v1/models). Its dist keeps @github/copilot and
+          # node-pty EXTERNAL, so the pruned production node_modules ships
+          # with it (upstream ships exactly that set).
+          #
+          # CRITICAL: every OTHER extension's node_modules must NOT be
+          # staged. The node_modules cache (listNodeModules.ts) includes
+          # every extensions/*/node_modules in the repo (~130k files /
+          # ~800MB) — copying them all ballooned the artifact to 1GB and
           # made the artifact download flaky. They are build-time dev
-          # dependencies; nothing reads them until Phase 7 anyway.
+          # dependencies. copilot's node_modules is the sole exception (it
+          # is pruned to production deps in its build step).
           shopt -s dotglob nullglob
           mkdir -p staging/extensions
           for ext_dir in extensions/*/; do
             name=$(basename "$ext_dir")
-            case "$name" in *-tests|*-test|copilot|node_modules) continue ;; esac
+            case "$name" in *-tests|*-test|node_modules) continue ;; esac
+            if [ "$name" = "copilot" ]; then
+              test -f "extensions/copilot/dist/extension.js" || { echo "::error::copilot dist/extension.js missing — build step failed"; exit 1; }
+              # Ship the runtime set: dist + production node_modules +
+              # manifests + assets. The 49MB TypeScript source tree (src/),
+              # tests, docs and the simulation-workbench .vscode/ dir are
+              # build-time only — upstream does not ship them either.
+              mkdir -p "staging/extensions/copilot"
+              for entry in "$ext_dir"* "$ext_dir".vscode; do
+                [ -e "$entry" ] || continue
+                case "$(basename "$entry")" in
+                  src|test|test-web|docs|dist-sourcemaps|.vscode|.github|.git) continue ;;
+                  *) cp -r "$entry" "staging/extensions/copilot/" ;;
+                esac
+              done
+              continue
+            fi
             mkdir -p "staging/extensions/$name"
             for entry in "$ext_dir"*; do
               if [ "$(basename "$entry")" != "node_modules" ]; then
@@ -408,7 +499,13 @@ jobs:
             staging/nls.messages.json \
             staging/extensions/theme-defaults/package.json \
             staging/extensions/theme-defaults/themes/dark_plus.json \
-            staging/out/vs/workbench/contrib/terminal/common/scripts/shellIntegration.ps1; do
+            staging/out/vs/workbench/contrib/terminal/common/scripts/shellIntegration.ps1 \
+            staging/node_modules/@xterm/addon-webgl/lib/addon-webgl.js \
+            staging/node_modules/@xterm/addon-unicode11/lib/addon-unicode11.js \
+            staging/node_modules/@xterm/xterm/lib/xterm.js \
+            staging/extensions/copilot/dist/extension.js \
+            staging/extensions/copilot/package.json \
+            staging/extensions/copilot/node_modules/@github/copilot/package.json; do
             [ -f "$f" ] || { echo "::error::missing client boot file: $f"; exit 1; }
             echo "ok  $f"
           done
@@ -437,6 +534,36 @@ jobs:
           name: workbench-client
           path: src-tauri/resources/client
 
+      # The Mountain sidecar manager (sidecar_channel.rs) runs the Electron
+      # "utility process" roles — extension host, pty host, file watcher —
+      # as plain Node.js child processes:
+      #     node.exe <clientRoot>/vstauri-sidecar.mjs   (VSCODE_ESM_ENTRYPOINT=...)
+      # The runtime is bundled at <install>/resources/node/node.exe and the
+      # stdin/stdout framing wrapper is staged into the client bundle here
+      # (the bundle-workbench job stages the client tree from `staging/`).
+      - name: Stage sidecar wrapper into the client bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp src-tauri/sidecar/vstauri-sidecar.mjs src-tauri/resources/client/vstauri-sidecar.mjs
+          test -f src-tauri/resources/client/vstauri-sidecar.mjs
+
+      # Node.js runtime for the sidecar processes (pinned to the version the
+      # shim advertises as process.versions.node — 22.14.0). NSIS compresses
+      # it; ~80MB raw / ~25MB compressed.
+      - name: Download Node.js runtime for the sidecar
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $version = '22.14.0'
+          New-Item -ItemType Directory -Force -Path src-tauri/resources/node | Out-Null
+          $zip = Join-Path $env:TEMP "node-$version.zip"
+          Invoke-WebRequest -Uri "https://nodejs.org/dist/v$version/node-v$version-win-x64.zip" -OutFile $zip
+          Expand-Archive -Path $zip -DestinationPath (Join-Path $env:TEMP "node-$version") -Force
+          Copy-Item (Join-Path $env:TEMP "node-$version/node-v$version-win-x64/node.exe") src-tauri/resources/node/node.exe -Force
+          if (-not (Test-Path src-tauri/resources/node/node.exe)) { throw "node.exe was not staged" }
+          (Get-Item src-tauri/resources/node/node.exe).Length / 1MB
+
       - name: Assert bundled client is complete
         shell: bash
         run: |
@@ -446,7 +573,11 @@ jobs:
             src-tauri/resources/client/out/vs/workbench/workbench.desktop.main.js \
             src-tauri/resources/client/product.json \
             src-tauri/resources/client/nls.messages.json \
-            src-tauri/resources/client/extensions/theme-defaults/themes/dark_plus.json; do
+            src-tauri/resources/client/extensions/theme-defaults/themes/dark_plus.json \
+            src-tauri/resources/client/extensions/copilot/dist/extension.js \
+            src-tauri/resources/client/extensions/copilot/package.json \
+            src-tauri/resources/client/vstauri-sidecar.mjs \
+            src-tauri/resources/node/node.exe; do
             [ -f "$f" ] || { echo "::error::client file missing in bundle: $f"; exit 1; }
           done
 
@@ -545,17 +676,25 @@ jobs:
 
             - **Windows**: `*-setup.exe` (NSIS)
 
-            Phase 1 shell: the original VS Code workbench renderer served
-            natively through the Tauri v2 `vscode-file://` custom protocol
-            (WebView2). No Electron, no HTTP server, no vscode-web. The
-            renderer boots against a native window configuration and an
-            instrumented IPC bridge (`ipc-calls.jsonl` + `vstauri.log` in
-            `%APPDATA%\VSTauri\logs`) that feeds the next phases.
+            VSTauri (by Mouri Younes) — the original VS Code workbench
+            in a Tauri v2 native shell (WebView2, `vscode-file://`
+            protocol). No Electron, no HTTP server, no vscode-web.
 
-            NOTE: Phase 1 scope is "workbench renders". Terminal, file
-            dialogs, storage and extensions land in later phases (see
-            ROADMAP.md); their IPC channels currently resolve to null and
-            are logged.
+            This build ships: full file-system + watcher services, the
+            integrated terminal backend (ConPTY) with the xterm renderer
+            addons, editor state persistence + hot exit (window bounds,
+            workspace session, unsaved-content backups), multi-window
+            (agents window, `window.open` popups), the theme-aware
+            "Starting…" boot splash, DPAPI-encrypted secret storage, the
+            Node.js sidecar runtime (extension host bring-up) and the
+            copilot extension with the BYOK AI providers (custom OpenAI
+            base URL + key; models list from `/v1/models`; no
+            GitHub/Google account required).
+
+            Diagnostics: `vstauri.log` + `ipc-calls.jsonl` in
+            `%APPDATA%\VSTauri\logs`. Remaining work is tracked in
+            ROADMAP.md (extension host bring-up, search via ext host,
+            debug/tasks, parity audit).
           prerelease: true
           files: |
             dist/**/*.exe

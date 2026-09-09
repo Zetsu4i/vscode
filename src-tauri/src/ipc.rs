@@ -76,7 +76,10 @@ static APP_HANDLE: OnceLock<tauri::AppHandle> = OnceLock::new();
 static PROTOCOL_READY: AtomicBool = AtomicBool::new(false);
 
 /// A registered `EventListen`: the renderer called `channel.listen(event, arg)`
-/// and Rust can push `[204, id]` frames to it.
+/// and Rust can push `[204, id]` frames to it. Each listener also remembers
+/// which window registered it so multi-window event routing stays correct
+/// (listener ids are only unique per window — each window runs its own
+/// protocol client with its own id counter).
 #[derive(Clone, Debug)]
 struct EventListener {
     channel: String,
@@ -84,6 +87,8 @@ struct EventListener {
     /// The `arg` passed to `listen` (e.g. `[sessionId]` for the
     /// localFilesystem `fileChange` event). Value::Null when omitted.
     arg: Value,
+    /// The window (Tauri label) that registered the listener.
+    window: String,
 }
 
 static EVENT_LISTENERS: LazyLock<Mutex<HashMap<i64, EventListener>>> =
@@ -104,6 +109,7 @@ pub(crate) fn register_test_listener(id: i64, channel: &str, event: &str, arg: V
                 channel: channel.to_string(),
                 event: event.to_string(),
                 arg,
+                window: String::new(),
             },
         );
     }
@@ -168,8 +174,26 @@ fn fire_to(targets: &[i64], payload: &Value) {
                 frames.push((*id, payload.clone()));
             }
         }
+        // fire_to is used by broadcast events (storage change, profiles,
+        // keyboard layout): deliver to every window that registered the
+        // listener id (each window's client has its own id space).
         let frame = encode_frame(&json!([204, *id]), payload);
-        dispatch_frame(&frame);
+        for label in listener_windows(*id) {
+            dispatch_frame_to(&label, &frame);
+        }
+    }
+}
+
+/// The windows that registered a listener id (usually exactly one).
+fn listener_windows(id: i64) -> Vec<String> {
+    if let Ok(guard) = EVENT_LISTENERS.lock() {
+        guard
+            .iter()
+            .filter(|(listener_id, _)| **listener_id == id)
+            .map(|(_, l)| l.window.clone())
+            .collect()
+    } else {
+        Vec::new()
     }
 }
 
@@ -209,10 +233,66 @@ pub fn vsbuffer_b64_decode(input: &str) -> Option<Vec<u8>> {
     base64_decode(input)
 }
 
+/// Base64 for channel services that need it (sidecar port traffic).
+pub fn base64_encode_public(bytes: &[u8]) -> String {
+    base64_encode(bytes)
+}
+
+// ---------------------------------------------------------------------------
+// Deferred protocol responses (utilityProcessWorker.createWorker resolves
+// only when the child process terminates, exactly like Electron)
+// ---------------------------------------------------------------------------
+
+/// Claim a request id: the [201] response frame is suppressed now and sent
+/// later by `resolve_deferred`. The answer will be routed back to `window`.
+pub fn defer_response(request_id: i64) {
+    // NOTE: the window is captured at resolve time by the sidecar module via
+    // resolve_deferred_to; this entry only suppresses the immediate answer.
+    let mut guard = DEFERRED_RESPONSES.lock().unwrap_or_else(|p| p.into_inner());
+    guard.insert(request_id, String::new());
+}
+
+/// Whether the response frame for this request id is still deferred.
+pub fn is_deferred(request_id: i64) -> bool {
+    DEFERRED_RESPONSES
+        .lock()
+        .map(|guard| guard.contains_key(&request_id))
+        .unwrap_or(false)
+}
+
+/// Send the deferred response frame now (Ok -> [201], Err -> [203]),
+/// routed to the window that made the request.
+pub fn resolve_deferred_to(request_id: i64, window: &str, result: Result<Value, String>) {
+    {
+        let mut guard = DEFERRED_RESPONSES.lock().unwrap_or_else(|p| p.into_inner());
+        guard.remove(&request_id);
+    }
+    let frame = match result {
+        Ok(data) => encode_frame(&json!([201, request_id]), &data),
+        Err(err) => encode_frame(
+            &json!([203, request_id]),
+            &json!({ "message": err, "name": "Error", "stack": null }),
+        ),
+    };
+    dispatch_frame_to(if window.is_empty() { "main" } else { window }, &frame);
+}
+
+/// Legacy single-window variant kept for compatibility (multi-window
+/// callers use resolve_deferred_to).
+#[allow(dead_code)]
+pub fn resolve_deferred(request_id: i64, result: Result<Value, String>) {
+    resolve_deferred_to(request_id, "main", result);
+}
+
+static DEFERRED_RESPONSES: LazyLock<Mutex<HashMap<i64, String>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
 /// Route an ipcRenderer call. `kind` is `"send"` (fire and forget) or
-/// `"invoke"` (expects a response).
+/// `"invoke"` (expects a response). `window_label` is the Tauri window the
+/// call came from (multi-window routing).
 pub fn route(
     app: &tauri::AppHandle,
+    window_label: &str,
     channel: &str,
     args: &[Value],
     kind: &str,
@@ -227,11 +307,11 @@ pub fn route(
 
         // Main-process protocol transport (see module docs).
         "vscode:hello" => {
-            on_protocol_hello();
+            on_protocol_hello(window_label);
             Ok(Value::Null)
         }
         "vscode:disconnect" => {
-            on_protocol_disconnect();
+            on_protocol_disconnect(window_label);
             Ok(Value::Null)
         }
         "vscode:message" => {
@@ -239,21 +319,39 @@ pub fn route(
                 .first()
                 .and_then(|v| v.as_str())
                 .ok_or_else(|| "vscode:message expects a base64 frame string".to_string())?;
-            on_protocol_frame(frame_b64);
+            on_protocol_frame(frame_b64, window_label);
             Ok(Value::Null)
+        }
+
+        // The renderer's terminal backend asks for a direct message-port
+        // connection to the pty host (localTerminalBackend.ts — Electron
+        // main spawns the pty host utility process on this channel and
+        // transfers the port back on ...MessageChannelResult).
+        "vscode:createPtyHostMessageChannel" => {
+            crate::sidecar_channel::handle_pty_host_channel(Some(app), window_label, args)?;
+            Ok(Value::Null)
+        }
+
+        // Auxiliary window registration (electron-sandbox
+        // auxiliaryWindowService -> `ipcRenderer.invoke('vscode:registerAuxiliaryWindow',
+        // parentWindowId)`). Mountain answers with a fresh window id so the
+        // child window can participate in nativeHost window-event routing.
+        "vscode:registerAuxiliaryWindow" => {
+            let parent = args.first().and_then(Value::as_i64).unwrap_or(1);
+            Ok(json!(crate::windows::register_auxiliary_window(window_label, parent)))
         }
 
         // Simple ipcRenderer channels answered directly.
         "vscode:toggleDevTools" => {
-            toggle_devtools(app);
+            toggle_devtools(app, window_label);
             Ok(Value::Null)
         }
         "vscode:openDevTools" => {
-            open_devtools(app);
+            open_devtools(app, window_label);
             Ok(Value::Null)
         }
         "vscode:reloadWindow" => {
-            if let Some(window) = app.get_webview_window("main") {
+            if let Some(window) = app.get_webview_window(window_label) {
                 let _ = window.eval("window.location.reload()");
             }
             Ok(Value::Null)
@@ -272,8 +370,9 @@ pub fn route(
 // Devtools helpers (require the tauri "devtools" feature, enabled in Cargo.toml)
 // ---------------------------------------------------------------------------
 
-fn toggle_devtools(app: &tauri::AppHandle) {
-    if let Some(window) = app.get_webview_window("main") {
+fn toggle_devtools(app: &tauri::AppHandle, window_label: &str) {
+    let label = if window_label.is_empty() { "main" } else { window_label };
+    if let Some(window) = app.get_webview_window(label) {
         if window.is_devtools_open() {
             window.close_devtools();
         } else {
@@ -282,8 +381,9 @@ fn toggle_devtools(app: &tauri::AppHandle) {
     }
 }
 
-fn open_devtools(app: &tauri::AppHandle) {
-    if let Some(window) = app.get_webview_window("main") {
+fn open_devtools(app: &tauri::AppHandle, window_label: &str) {
+    let label = if window_label.is_empty() { "main" } else { window_label };
+    if let Some(window) = app.get_webview_window(label) {
         window.open_devtools();
     }
 }
@@ -292,23 +392,31 @@ fn open_devtools(app: &tauri::AppHandle) {
 // vscode: protocol state machine
 // ---------------------------------------------------------------------------
 
-fn on_protocol_hello() {
-    crate::logger::log_app("info", "ipc protocol: renderer connected (vscode:hello)");
+fn on_protocol_hello(window_label: &str) {
+    crate::logger::log_app(
+        "info",
+        &format!("ipc protocol: renderer connected (vscode:hello, window: {})", window_label),
+    );
     // ChannelServer parity: the Initialize frame goes out immediately so the
     // renderer's ChannelClient leaves its Uninitialized state and can flush
     // queued requests.
     let frame = encode_frame(&json!([200]), &Value::Null);
-    dispatch_frame(&frame);
+    dispatch_frame_to(if window_label.is_empty() { "main" } else { window_label }, &frame);
 }
 
-fn on_protocol_disconnect() {
-    crate::logger::log_app("info", "ipc protocol: renderer disconnected (vscode:disconnect)");
+fn on_protocol_disconnect(window_label: &str) {
+    crate::logger::log_app(
+        "info",
+        &format!("ipc protocol: renderer disconnected (vscode:disconnect, window: {})", window_label),
+    );
     if let Ok(mut guard) = EVENT_LISTENERS.lock() {
-        guard.clear();
+        guard.retain(|_, listener| listener.window != window_label);
     }
+    crate::sidecar_channel::kill_window_processes(window_label);
 }
 
-fn on_protocol_frame(frame_b64: &str) {
+fn on_protocol_frame(frame_b64: &str, window_label: &str) {
+    let label = if window_label.is_empty() { "main" } else { window_label };
     let bytes = match base64_decode(frame_b64) {
         Some(bytes) => bytes,
         None => {
@@ -340,7 +448,18 @@ fn on_protocol_frame(frame_b64: &str) {
             let command = header_arr.get(3).and_then(Value::as_str).unwrap_or("").to_string();
             let call_desc = format!("protocol:{}:{}", channel_name, command);
             log_call(&call_desc, std::slice::from_ref(&body), "promise");
-            let response = route_channel_request(app_handle(), &channel_name, &command, &body);
+            let response = route_channel_request(
+                app_handle(),
+                label,
+                &channel_name,
+                &command,
+                &body,
+                id,
+            );
+            // A handler may have deferred the response (sidecar lifecycle).
+            if is_deferred(id) {
+                return;
+            }
             let frame = match response {
                 Ok(data) => encode_frame(&json!([201, id]), &data),
                 Err(err) => encode_frame(
@@ -348,14 +467,14 @@ fn on_protocol_frame(frame_b64: &str) {
                     &json!({ "message": err, "name": "Error", "stack": null }),
                 ),
             };
-            dispatch_frame(&frame);
+            dispatch_frame_to(label, &frame);
         }
         101 => { /* PromiseCancel: no active long-running requests yet. */ }
         102 => {
             // EventListen: [102, id, channelName, name] + arg. Register so Rust
             // can fire [204, id] frames later; never answered otherwise. The
             // arg is kept — it identifies the event stream for per-session
-            // events (localFilesystem fileChange pty host window events).
+            // events (localFilesystem fileChange, pty host window events).
             let channel_name = header_arr.get(2).and_then(Value::as_str).unwrap_or("").to_string();
             let event = header_arr.get(3).and_then(Value::as_str).unwrap_or("").to_string();
             let call_desc = format!("protocol:{}:listen:{}", channel_name, event);
@@ -367,6 +486,7 @@ fn on_protocol_frame(frame_b64: &str) {
                         channel: channel_name,
                         event,
                         arg: body,
+                        window: label.to_string(),
                     },
                 );
             }
@@ -399,9 +519,16 @@ fn app_handle() -> Option<&'static tauri::AppHandle> {
     APP_HANDLE.get()
 }
 
-/// Deliver a protocol frame (raw bytes) to the renderer as a
-/// `vscode:message` ipcRenderer event.
+/// Deliver a protocol frame (raw bytes) to the `main` window as a
+/// `vscode:message` ipcRenderer event (legacy single-window path).
+#[allow(dead_code)]
 fn dispatch_frame(frame: &[u8]) {
+    dispatch_frame_to("main", frame);
+}
+
+/// Deliver a protocol frame (raw bytes) to a specific window as a
+/// `vscode:message` ipcRenderer event.
+fn dispatch_frame_to(window_label: &str, frame: &[u8]) {
     if !PROTOCOL_READY.load(Ordering::SeqCst) {
         crate::logger::log_app("warn", "ipc protocol: frame dropped (webview not ready)");
         return;
@@ -409,7 +536,9 @@ fn dispatch_frame(frame: &[u8]) {
     let Some(app) = app_handle() else {
         return;
     };
-    let Some(window) = app.get_webview_window("main") else {
+    let label = if window_label.is_empty() { "main" } else { window_label };
+    let window = app.get_webview_window(label).or_else(|| app.get_webview_window("main"));
+    let Some(window) = window else {
         return;
     };
     let b64 = base64_encode(frame);
@@ -430,10 +559,13 @@ fn dispatch_frame(frame: &[u8]) {
 
 fn route_channel_request(
     app: Option<&tauri::AppHandle>,
+    window_label: &str,
     channel: &str,
     command: &str,
     arg: &Value,
+    request_id: i64,
 ) -> Result<Value, String> {
+    let label = if window_label.is_empty() { "main" } else { window_label };
     match (channel, command) {
         // nativeHost: the full INativeHostService surface (ProxyChannel,
         // args = [windowId, ...methodArgs])
@@ -455,6 +587,13 @@ fn route_channel_request(
         // keyboardLayout: INativeKeyboardLayoutService
         ("keyboardLayout", _) => crate::keyboard_channel::handle(command, arg),
 
+        // encryption: IEncryptionMainService (safeStorage parity — DPAPI on
+        // Windows). The renderer's secret storage (every stored API key,
+        // including the AI provider BYOK keys) encrypts/decrypts through
+        // this channel; without it the secrets service stays in-memory and
+        // keys never survive a restart.
+        ("encryption", _) => crate::encryption_channel::handle(command, arg),
+
         // localFilesystem: DiskFileSystemProviderChannel — the renderer
         // FileService's disk backend (settings, keybindings, workspace
         // files, extensions metadata, ...).
@@ -463,6 +602,12 @@ fn route_channel_request(
         // localPty: IPtyService/IPtyHostService over portable-pty (ConPTY
         // on Windows) — the integrated terminal backend.
         ("localPty", _) => crate::terminal_channel::handle(command, arg),
+
+        // ---- Phase 7: the Node sidecar channels (extension host +
+        // utility process workers + pty host ports) ----
+        ("utilityProcessWorker", _) | ("extensionHostStarter", _) => {
+            crate::sidecar_channel::handle(app, label, command, arg, request_id)
+        }
 
         // ---- process / launch ----
         ("process", "getMainProcessPid") | ("launch", "getMainProcessPid") => {
@@ -507,8 +652,22 @@ fn route_channel_request(
         // browserView: BrowserView management. `updateWindowConfiguration`
         // is called once during BrowserViewWorkbenchService creation; a
         // null answer keeps the service alive so its real consumers
-        // (webview-backed views) can land in a later phase.
+        // (webview-backed views) can land in a later phase. `getBrowserViews`
+        // is the BrowserViewWorkbenchService init probe — an empty list
+        // matches Electron with no persisted views (previously this
+        // rejected and produced a noisy boot error).
         ("browserView", "updateWindowConfiguration") => Ok(Value::Null),
+        ("browserView", "getBrowserViews") => Ok(json!([])),
+        ("browserView", _) => Ok(Value::Null),
+
+        // fileManagedSettings: ManagedSettingsChannel (policy/managed
+        // settings). No enterprise policy in the shell: Electron's
+        // empty-policy answer is `null` content — the renderer then behaves
+        // like no managed settings exist. Previously these rejected and
+        // surfaced as boot errors on every start.
+        ("fileManagedSettings", "getManagedSettings") => Ok(Value::Null),
+        ("fileManagedSettings", "getRawManagedSettings") => Ok(Value::Null),
+        ("fileManagedSettings", _) => Ok(Value::Null),
 
         // Everything else is a faithful "channel not registered" rejection —
         // same outcome as Electron's 1s pending-request timeout, and the call
@@ -779,4 +938,9 @@ fn log_call(channel: &str, args: &[Value], kind: &str) {
             }
         }
     }
+}
+
+/// Base64 decode for command entry points (message port traffic).
+pub fn base64_decode_public(input: &str) -> Option<Vec<u8>> {
+    base64_decode(input)
 }

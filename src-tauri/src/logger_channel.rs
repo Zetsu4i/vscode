@@ -47,10 +47,19 @@ pub fn init(logs_dir: &PathBuf) {
     }
 }
 
-/// Resolve the on-disk location for a logger `file` URI. Logger resources
-/// arrive as `UriComponents` objects; anything outside the logs dir is
-/// clamped into it (defense in depth: the renderer must not be able to
-/// open arbitrary files through this channel).
+/// Resolve the on-disk location for a logger `file` URI.
+///
+/// When the requested path is INSIDE the data root (the per-session
+/// `logs/<session>/windowN/output_*` spool files the renderer creates
+/// through `createLogger`), the file is written exactly where the renderer
+/// asked: the Output panel and the log viewer later READ these files back
+/// through the localFilesystem channel at those same paths — clamping them
+/// elsewhere made every read fail with FileNotFound and left the Output
+/// panel empty (observed in the first Windows runtime log).
+///
+/// Anything outside the data root is clamped into the logs dir with only
+/// its final path component honored (defense in depth: the renderer must
+/// not be able to open arbitrary files through this channel).
 fn logger_path(file: &Value) -> PathBuf {
     let raw = file
         .get("path")
@@ -61,6 +70,38 @@ fn logger_path(file: &Value) -> PathBuf {
         .get()
         .cloned()
         .unwrap_or_else(|| std::env::temp_dir());
+
+    // Try the requested location first when it stays inside the data root.
+    if !raw.is_empty() {
+        let decoded = crate::util::percent_decode(&raw);
+        let fs_path = if cfg!(windows) {
+            decoded.trim_start_matches('/').replace('/', "\\")
+        } else {
+            decoded
+        };
+        let requested = PathBuf::from(&fs_path);
+        if !requested.as_os_str().is_empty() {
+            let data_root = crate::config::data_root();
+            if let (Ok(canon_requested), Ok(canon_root)) =
+                (requested.canonicalize(), data_root.canonicalize())
+            {
+                if canon_requested.starts_with(&canon_root) {
+                    return canon_requested;
+                }
+            } else {
+                // Not on disk yet (createLogger opens it for append below):
+                // validate structurally by normalized prefix instead.
+                let norm = requested.to_string_lossy().replace('\\', "/").to_lowercase();
+                let root_norm = data_root.to_string_lossy().replace('\\', "/").to_lowercase();
+                if root_norm.len() > 1
+                    && (norm == root_norm || norm.starts_with(&format!("{}/", root_norm)))
+                {
+                    return requested;
+                }
+            }
+        }
+    }
+
     let name = raw.rsplit('/').next().unwrap_or("renderer.log");
     // Only the final path component is honored, keeping writes inside the
     // logs tree regardless of the resource URI's shape.
@@ -130,6 +171,9 @@ pub fn handle(command: &str, arg: &Value) -> Result<Value, String> {
             let Some(messages) = messages else {
                 return Ok(Value::Null);
             };
+            if let Some(parent) = path.parent() {
+                let _ = std::fs::create_dir_all(parent);
+            }
             let mut handle = std::fs::OpenOptions::new()
                 .create(true)
                 .append(true)
@@ -281,6 +325,23 @@ mod tests {
         assert_eq!(log_level_name(1), "TRACE");
         assert_eq!(log_level_name(3), "INFO");
         assert_eq!(log_level_name(5), "ERROR");
+    }
+
+    #[test]
+    fn data_root_paths_are_honored_verbatim() {
+        // A logger file inside the data root must resolve to the EXACT
+        // requested path (the renderer reads it back through the fs
+        // channel — this is the Output panel spool contract).
+        let root = crate::config::data_root();
+        let uri = json!({ "scheme": "file", "path": format!(
+            "/{}",
+            root.join("logs/20260908T194209/window1/output_20260908T194214")
+                .to_string_lossy()
+                .replace('\\', "/")
+        )});
+        let resolved = logger_path(&uri);
+        let expected = root.join("logs/20260908T194209/window1/output_20260908T194214");
+        assert_eq!(resolved, expected);
     }
 
     #[test]

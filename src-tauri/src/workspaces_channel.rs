@@ -66,8 +66,33 @@ pub fn handle(command: &str, arg: &Value) -> Result<Value, String> {
             "backupPath": null
         })),
 
-        // ---- dirty workspaces (backup path tracking — none yet) ----
-        "getDirtyWorkspaces" => Ok(json!([])),
+        // ---- dirty workspaces (hot-exit registry) ----
+        // IWorkspaceIdentifier[] of every workspace/folder with unsaved
+        // backups on disk — windowsMainService consults this on boot to
+        // offer restoring workspaces that still hold dirty working copies
+        // (the Backups/ tree the renderer writes through localFilesystem).
+        "getDirtyWorkspaces" => {
+            let registered = crate::window_state::backup_workspaces();
+            let mut out: Vec<Value> = Vec::new();
+            for key in ["folders", "workspaces"] {
+                if let Some(map) = registered.get(key).and_then(Value::as_object) {
+                    for (id, uri) in map {
+                        // Upstream maps workspace ids to identifiers; the
+                        // backup registry already stores the config path
+                        // URI components under each id.
+                        let _ = id;
+                        if let Some(config_path) = uri.get("configPath") {
+                            out.push(json!({ "id": id, "configPath": config_path }));
+                        } else if uri.get("path").is_some() {
+                            // A folder entry: return as a recent-folder
+                            // identifier (folderUri shape).
+                            out.push(json!({ "id": id, "folderUri": uri }));
+                        }
+                    }
+                }
+            }
+            Ok(json!(out))
+        }
 
         other => Err(format!("workspaces channel: unknown command {}", other)),
     }
@@ -83,13 +108,65 @@ fn recently_opened() -> Value {
     let Some(path) = RECENT_FILE.get() else {
         return json!({ "workspaces": [], "files": [] });
     };
-    match std::fs::read_to_string(path) {
-        Ok(text) => match serde_json::from_str::<Value>(&text) {
-            Ok(value) if value.is_object() => value,
-            _ => json!({ "workspaces": [], "files": [] }),
-        },
-        Err(_) => json!({ "workspaces": [], "files": [] }),
-    }
+    let raw = std::fs::read_to_string(path)
+        .ok()
+        .and_then(|text| serde_json::from_str::<Value>(&text).ok())
+        .filter(|value| value.is_object())
+        .unwrap_or_else(|| json!({ "workspaces": [], "files": [] }));
+    sanitize_recently_opened(&raw)
+}
+
+/// Drop malformed entries before they reach the renderer. The menubar and
+/// the welcome page dereference `workspace.configPath` / `folderUri` /
+/// `fileUri` unconditionally (`createOpenRecentMenuAction`,
+/// `filterRecentlyOpened`) — a single entry missing them crashes the whole
+/// menu with `Cannot read properties of undefined`. Entries written by
+/// older shells (or partial writes) get filtered here.
+fn sanitize_recently_opened(raw: &Value) -> Value {
+    let valid_workspace = |entry: &Value| {
+        entry
+            .get("workspace")
+            .and_then(|w| w.get("configPath"))
+            .map(|p| !p.is_null())
+            .unwrap_or(false)
+            || entry
+                .get("folderUri")
+                .map(|f| !f.is_null() && f.get("path").is_some())
+                .unwrap_or(false)
+    };
+    let valid_file = |entry: &Value| {
+        entry
+            .get("fileUri")
+            .map(|f| !f.is_null() && f.get("path").is_some())
+            .unwrap_or(false)
+    };
+
+    let workspaces = raw
+        .get("workspaces")
+        .and_then(Value::as_array)
+        .map(|entries| {
+            entries
+                .iter()
+                .filter(|entry| entry.is_object() && valid_workspace(entry))
+                .take(MAX_RECENT_ENTRIES)
+                .cloned()
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    let files = raw
+        .get("files")
+        .and_then(Value::as_array)
+        .map(|entries| {
+            entries
+                .iter()
+                .filter(|entry| entry.is_object() && valid_file(entry))
+                .take(MAX_RECENT_ENTRIES)
+                .cloned()
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+
+    json!({ "workspaces": workspaces, "files": files })
 }
 
 fn write_recently_opened(value: &Value) {

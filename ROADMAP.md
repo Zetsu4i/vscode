@@ -120,6 +120,45 @@ Node is temporarily kept for extension compatibility. It is not Electron.
 - ✅ Done
 - ⛔ Blocked
 
+## Session log (2026-09-10)
+
+Salvage + completion of the interrupted 2026-09-08 session (~790 lines of
+uncommitted, never-compiled work) plus this round's feature list:
+
+1. **Compile fixes in the stranded work**: `windows` crate dependency
+   (0.61 has no `implement` feature — the macro is always available via
+   the windows-core re-export), `webview2-com`/`windows-core` promoted to
+   direct dependencies, COM API corrections (Ref params, out-param BOOL
+   getters, plain-i64 event tokens, SendCom wrapper for the deferral
+   handoff), sidecar_channel borrow/type fixes, tauri.conf.json invalid
+   `displayName` fields (replaced with `installMode` + bundle
+   `publisher`).
+2. **VSTauri by Mouri Younes branding** completed end-to-end: product.json
+   identity override (window title, About, telemetry names), NSIS
+   publisher, Cargo authors, boot payload.
+3. **Theme-aware branded boot splash** replacing the fake dark VS Code
+   layout skeleton.
+4. **Logger channel**: files inside the data root now write at their real
+   paths (Output panel spool contract — kills the `output_*` FileNotFound
+   noise).
+5. **Session/hot-exit persistence hardening** (backupPath at every boot,
+   close-time workspace + bounds capture, boot-time bounds restore,
+   always-persist state).
+6. **`encryption` channel (DPAPI)** — persisted secrets, prerequisite for
+   AI provider API keys.
+7. **Terminal**: full @xterm addon family + vscode-textmate staged and
+   smoke-asserted.
+8. **Phase 7 groundwork in CI**: node.exe runtime download, sidecar
+   wrapper staging, copilot compile + ship (dist + production
+   node_modules), boot-file asserts for all of it.
+9. Remaining from the user's list after this round: first ext-host boot
+   validation (Phase 7), search acceptance (rides ext host), terminal
+   restart persistence, release hardening (signing, updater).
+
+Known-good verification: `cargo check --target x86_64-pc-windows-msvc`
+clean in the agent workspace (llvm-rc cross resource compile); the Linux
+host check requires GTK dev libs and is covered by CI instead.
+
 ---
 
 ## Phase 0: Repository Baseline and Guardrails
@@ -255,7 +294,7 @@ The contract has two halves, both captured by the extractor script
 
 ## Phase 3: Window, Dialog, Clipboard, and Storage
 
-### Status: 🟦 In progress
+### Status: 🟦 In progress (multi-window + hot exit + secrets landed; Windows runtime round-trip pending)
 
 ### Goal
 
@@ -263,7 +302,45 @@ Replace Electron main process basics with Tauri/Rust services.
 
 ### Tasks
 
-- [ ] Implement window service (multi-window lifecycle: new/focus/close
+- [x] Multi-window, landed 2026-09-10:
+      `windows.rs` — a VS Code-numeric window registry, `openWindow` /
+      `openAgentsWindow` full workbench windows (per-label window
+      configurations with own windowId / backupPath / agents profile),
+      and `window.open` popups through WebView2's NewWindowRequested COM
+      event (`#[implement]` handler with the deferral API — the popup IS
+      a real Tauri window whose CoreWebView2 is handed back through
+      SetNewWindow, so the workbench's auxiliary-window DOM handshakes
+      work). NOTE: this code had never compiled before 2026-09-10 — the
+      `windows = { features = ["implement"] }` dependency was invalid
+      (0.61 has no such feature) and the COM signatures were wrong
+      (Ref params, out-param BOOL getters). Fixed + cross-checked with
+      `cargo check --target x86_64-pc-windows-msvc` in the agent
+      workspace.
+- [x] Theme-aware branded boot splash (2026-09-10): the window
+      configuration no longer ships a fake-layout `partsSplash`
+      (layoutInfo removed — workbench.js then only applies the theme
+      background), and the Wind shim renders a "VSTauri / Version x.y.z /
+      by Mouri Younes / Starting…" overlay from `__VSTAURI_BOOT__`
+      (OS-theme colors: Windows AppsUseLightTheme + high contrast), removed
+      when the real titlebar renders.
+- [x] Credential storage: the `encryption` channel (IEncryptionMainService
+      parity — DPAPI CryptProtectData/CryptUnprotectData, JSON envelope
+      `{data: base64}` like safeStorage) — the secret storage service
+      (EVERY stored API key, incl. the AI provider BYOK keys) now
+      persists across restarts instead of staying in-memory.
+- [x] Editor state persistence / hot exit (2026-09-10 hardening):
+      every boot allocates `Backups/<workspaceId>` and points the window
+      configuration at it (the renderer's BackupTracker spills unsaved
+      working copies there and restores them next boot — "many editors
+      closed with unsaved content come back", the original hot-exit
+      behavior); windowsState.json now always records the closing
+      window's workspace (main window tracked at boot, secondary windows
+      tracked on creation) and its live bounds (captured at
+      CloseRequested: position/size/maximized/fullscreen; maximized keeps
+      the last normal bounds, Electron semantics); the main window
+      reopens at the saved bounds. `getDirtyWorkspaces` answers from the
+      Backups registry.
+- [x] Window title, size, and fullscreen work (title/size/fullscreen
       per IWindowOpenable + forceNewWindow — currently a single window
       reloaded into the new workspace; full window management is a later
       phase)
@@ -335,18 +412,19 @@ Replace Electron main process basics with Tauri/Rust services.
       Windows in the next build round)
 - [ ] Window title, size, and fullscreen work (title/size/fullscreen
       already answer; multi-window lifecycle pending)
-- [ ] Auxiliary/multi windows: the workbench opens auxiliary windows
-      (settings, diff editors, agents) through `mainWindow.open('about:blank',
-      popup-features)`; Electron intercepts this in the main process
-      (setWindowOpenHandler → native window with the workbench URL). The
-      Wind layer needs a `window.open` replacement that asks Mountain to
-      create a real second WebviewWindow (same workbench URL + shim
-      initialization script, per-window configuration with its own windowId
-      + the `vscode:registerAuxiliaryWindow` handshake), because WebView2
-      browser-managed popups never receive the preload shim.
+- [x] Auxiliary/multi windows: `window.open` popups are intercepted at
+      the WebView2 NewWindowRequested COM event and materialized as real
+      Tauri windows with the shim + per-window boot payload; the popup's
+      CoreWebView2 is handed back via SetNewWindow so the renderer gets
+      genuine `window.opener` semantics (Electron setWindowOpenHandler
+      parity). The `vscode:registerAuxiliaryWindow` handshake is answered
+      with per-window numeric ids. Agents window: `nativeHost.openAgentsWindow`
+      boots a full second workbench window (isSessionsWindow + agents
+      profile + shared agent-sessions workspace).
 - [x] Clipboard copy/paste works (text + images; custom formats pending)
 - [ ] Settings persist after restart (disk-backed by construction; needs a
-      Windows restart round-trip to confirm end-to-end)
+      Windows restart round-trip to confirm end-to-end — bounds/backup
+      persistence and secret storage landed 2026-09-10)
 
 ---
 
@@ -398,13 +476,13 @@ Replace Electron file service with Rust file service.
       round must also run compile-copilot and ship its dist/). Verified by
       the CI bundle assertions + `--vstauri-smoke` (theme-defaults
       dark_plus.json).
-- [ ] OPEN QUESTION (watcher routing): the desktop renderer's *recursive*
-      watcher goes through `UniversalWatcherClient` →
-      `utilityProcessWorker.createWorker({moduleId: 'vs/platform/files/node/watcher/watcherMain'})`
-      (a utility process in Electron). Our notify-based watcher currently
-      answers the `localFilesystem` channel's own watch/unwatch surface.
-      First Windows runtime logs from the new build must show which path
-      the FileService actually takes before more watcher work is invested.
+- [x] Watcher routing ANSWERED (2026-09-10): the recursive watcher does
+      go through `utilityProcessWorker.createWorker` → the
+      watcherMain utility process — which the Node sidecar manager now
+      serves (sidecar_channel + resources/node/node.exe). The renderer
+      gets the REAL upstream parcel/@vscode watcher semantics in-process
+      through the sidecar; the notify-based localFilesystem watcher keeps
+      covering the non-recursive surface.
 - [ ] Add encoding and BOM handling
 - [ ] Add workspace folder APIs
 - [ ] Add search file traversal hooks
@@ -420,7 +498,7 @@ Replace Electron file service with Rust file service.
 
 ## Phase 5: Terminal Service (Mountain: PTY)
 
-### Status: 🟦 In progress (core backend done; renderer bring-up next)
+### Status: 🟦 In progress (backend done; xterm renderer deps now bundled — first Windows runtime round-trip pending)
 
 ### Goal
 
@@ -467,6 +545,13 @@ Replace Electron/node-pty terminal backend with Rust PTY.
       upstream tables
 - [x] Preserve cwd and environment handling (string | UriComponents cwd,
       env merge: inherited → resolved env → launch-config env)
+- [x] Terminal renderer dependencies bundled (2026-09-10): the first
+      Windows runtime log showed the integrated terminal dead on arrival —
+      the xterm addons (`@xterm/addon-webgl|unicode11|progress|clipboard|
+      search|serialize|ligatures|image`, `@xterm/xterm`, `@xterm/headless`,
+      `vscode-textmate`) 404ed as `node_modules.asar/@xterm/...`. The CI
+      bundle now stages the full @xterm family and the smoke mode asserts
+      the addon files exist.
 - [ ] Persistent terminal state across app restarts (serialize/revive are
       in-memory stubs; layout info survives window reloads)
 - [ ] Dynamic cwd tracking via OSC 633/9;9 (initial cwd is reported)
@@ -529,17 +614,46 @@ Workspace search and process execution with Rust-grade performance.
 
 ## Phase 7: Extension Host Integration (Mountain: Sidecar)
 
-### Status: ⬜ Not started
+### Status: 🟦 In progress (runtime + copilot bundled; first ext-host boot pending)
 
 ### Goal
 
 Preserve extension host while replacing the Electron extension main bridge.
 
+**2026-09-10 round — the bundle is now ext-host-ready:**
+
+- `resources/node/node.exe` (Node 22.14.0, pinned download) ships in the
+  NSIS bundle; sidecar_channel resolves it at
+  `<install>/resources/node/node.exe`.
+- `vstauri-sidecar.mjs` (stdin/stdout length-prefixed framing wrapper that
+  emulates `process.parentPort` + `MessagePortMain` over plain Node) is
+  staged into the client bundle — the extension host, pty host and
+  watcher utility processes all boot through it with
+  `VSCODE_ESM_ENTRYPOINT=<module>` + the original `out/bootstrap-fork.js`.
+- The copilot extension ships in `extensions/copilot` WITH its compiled
+  `dist/` (esbuild, from this repo's source) and pruned production
+  `node_modules` (the dist keeps `@github/copilot` — the win32-x64 CLI/SDK
+  with conpty natives — `node-pty` and friends EXTERNAL, so those
+  node_modules are runtime requirements, exactly the set upstream ships).
+- The `encryption` channel (DPAPI) makes the secret storage persist —
+  required for storing AI provider API keys.
+- AI provider surface (user-facing): the copilot BYOK providers —
+  openai, anthropic, gemini, ollama, openrouter, azure, xai,
+  **customoai (custom OpenAI-compatible base URL + key)** and
+  customendpoint — configured in the editor's model manager; the model
+  list is fetched from the provider's `/v1/models` endpoint; keys are
+  stored encrypted; NO GitHub/Google account is needed for any of them.
+
+NEXT: first ext-host boot validation on a Windows machine (the runtime
+log will show extensionHostStarter → sidecar spawn → bootstrap-fork →
+extension activation); fix the long tail from that log.
+
 ### Tasks
 
 - [ ] Keep original VS Code extension host as Node.js sidecar
-- [ ] Bundle a pre-compiled Node.js binary into `src-tauri/binaries/` and
-      register it as a Tauri sidecar (`externalBin` in tauri.conf.json)
+- [x] Bundle a pre-compiled Node.js binary (resources/node/node.exe, tauri
+      `resources` config — managed by sidecar_channel, not `externalBin`,
+      because the sidecar needs the CLIENT root as cwd)
 - [ ] Spin up the sidecar at app boot from Rust; the extension host process
       is managed by the Mountain backend
 - [ ] Replace Electron IPC transport (MessagePort-based
