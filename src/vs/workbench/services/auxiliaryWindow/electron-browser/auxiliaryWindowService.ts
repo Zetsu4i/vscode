@@ -160,7 +160,24 @@ export class NativeAuxiliaryWindowService extends BrowserAuxiliaryWindowService 
 
 	protected override async resolveWindowId(auxiliaryWindow: NativeCodeWindow): Promise<number> {
 		mark('code/auxiliaryWindow/willResolveWindowId');
-		const windowId = await auxiliaryWindow.vscode.ipcRenderer.invoke('vscode:registerAuxiliaryWindow', this.nativeHostService.windowId);
+
+		// VSTauri: WebView2 popups install `window.vscode` through an
+		// asynchronous document-created initialization script, slightly AFTER
+		// `window.open()` resolves in the opener. Electron's preload is
+		// guaranteed to have run before `window.open()` returns; wait briefly
+		// for the same guarantee instead of dereferencing undefined.
+		const sandbox = () => (auxiliaryWindow as unknown as { vscode?: ISandboxGlobals }).vscode;
+		const deadline = Date.now() + 10_000;
+		let globals = sandbox();
+		while (!globals?.ipcRenderer && Date.now() < deadline) {
+			await new Promise<void>(resolve => setTimeout(resolve, 50));
+			globals = sandbox();
+		}
+		if (!globals?.ipcRenderer) {
+			throw new Error('Auxiliary window did not expose preload globals in time');
+		}
+
+		const windowId = await globals.ipcRenderer.invoke('vscode:registerAuxiliaryWindow', this.nativeHostService.windowId);
 		mark('code/auxiliaryWindow/didResolveWindowId');
 		assert(typeof windowId === 'number');
 

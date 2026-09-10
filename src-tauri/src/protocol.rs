@@ -145,6 +145,34 @@ fn cache_lookup(path: &Path) -> Option<std::sync::Arc<CachedBody>> {
         .and_then(|cache| cache.map.get(path).cloned())
 }
 
+/// Pre-read the boot-critical client files into the body cache while the
+/// webview window is still being created (`setup` runs this on a background
+/// thread; the first `workbench.html` request then finds warm bytes and the
+/// ~10 MiB `workbench.desktop.main.js` read + gzip happen off the request
+/// path). Errors are silently ignored: a missing file only means the
+/// request path repopulates the cache exactly as before.
+pub fn warm_boot_files(app: &tauri::AppHandle) {
+    let root = client_root(app).clone();
+    const WARM_FILES: &[&str] = &[
+        // The document + boot script + the big module graph + CSS.
+        "out/vs/code/electron-browser/workbench/workbench.html",
+        "out/vs/code/electron-browser/workbench/workbench.js",
+        "out/vs/workbench/workbench.desktop.main.js",
+        "out/vs/workbench/workbench.desktop.main.css",
+        // Fonts and icons block first paint.
+        "out/media/codicon.ttf",
+        "out/vs/base/browser/ui/codicons/codicon/codicon.ttf",
+    ];
+    for rel in WARM_FILES {
+        let target = root.join(rel);
+        if let Ok(bytes) = std::fs::read(&target) {
+            let mime = mime_for(&target);
+            let etag = etag_for(&target, bytes.len());
+            cache_insert(target, bytes, etag, mime);
+        }
+    }
+}
+
 /// Insert a body, evicting the oldest quarter of the cache when the byte
 /// budget is exceeded (crude but predictable; a full workbench boot fits
 /// entirely, so eviction only guards pathological access patterns like

@@ -17,7 +17,7 @@
 //!      parts/ipc/common/ipc.ts, constructor: `sendResponse({ type: 200 })`).
 //!    * request frames    -> parse `[type, id, channelName, name]` + arg, route
 //!      to the channel registry below, answer with `[201, id]` + data.
-//!    * unregistered channels -> reject with `[203, id]` + error object. In
+//!    * unregistered channels -> reject with `[202, id]` + error object. In
 //!      Electron, requests to a channel that never registers reject after the
 //!      1s pending-request timeout with a "channel not found" style error; we
 //!      reject immediately with the same shape so callers take their existing
@@ -260,7 +260,7 @@ pub fn is_deferred(request_id: i64) -> bool {
         .unwrap_or(false)
 }
 
-/// Send the deferred response frame now (Ok -> [201], Err -> [203]),
+/// Send the deferred response frame now (Ok -> [201], Err -> [202]),
 /// routed to the window that made the request.
 pub fn resolve_deferred_to(request_id: i64, window: &str, result: Result<Value, String>) {
     {
@@ -270,11 +270,40 @@ pub fn resolve_deferred_to(request_id: i64, window: &str, result: Result<Value, 
     let frame = match result {
         Ok(data) => encode_frame(&json!([201, request_id]), &data),
         Err(err) => encode_frame(
-            &json!([203, request_id]),
-            &json!({ "message": err, "name": "Error", "stack": null }),
+            &json!([202, request_id]),
+            &error_body(&err),
         ),
     };
     dispatch_frame_to(if window.is_empty() { "main" } else { window }, &frame);
+}
+
+/// Build the PromiseError payload for a rejected protocol request.
+///
+/// ResponseType 202 (`PromiseError`) is the frame type whose payload the
+/// renderer turns into a REAL `Error` (`new Error(data.message)` + `name` +
+/// `stack` — see ipc.ts `requestHandler`). We used to send 203
+/// (`PromiseErrorObj`), which rejects with the RAW object: every FS error
+/// then surfaced as "[object Object]" with no `name`, so
+/// `toFileSystemProviderErrorCode` could not recognize FileNotFound and
+/// missing mcp.json/tasks.json/extensions.json logged as loud errors
+/// instead of being handled silently.
+///
+/// FS errors carry their provider error code through `fs_channel::fs_error`
+/// as a `\u{1}`-separated `<code>\u{1}<message>` pair; the name is rebuilt
+/// as `"<code> (FileSystemError)"` — the exact shape
+/// `markAsFileSystemProviderError` produces and
+/// `toFileSystemProviderErrorCode` parses back (files.ts).
+fn error_body(err: &str) -> Value {
+    if let Some(rest) = err.strip_prefix('\u{1}') {
+        if let Some((code, message)) = rest.split_once('\u{1}') {
+            return json!({
+                "message": message,
+                "name": format!("{} (FileSystemError)", code),
+                "stack": null,
+            });
+        }
+    }
+    json!({ "message": err, "name": "Error", "stack": null })
 }
 
 /// Legacy single-window variant kept for compatibility (multi-window
@@ -463,8 +492,8 @@ fn on_protocol_frame(frame_b64: &str, window_label: &str) {
             let frame = match response {
                 Ok(data) => encode_frame(&json!([201, id]), &data),
                 Err(err) => encode_frame(
-                    &json!([203, id]),
-                    &json!({ "message": err, "name": "Error", "stack": null }),
+                    &json!([202, id]),
+                    &error_body(&err),
                 ),
             };
             dispatch_frame_to(label, &frame);

@@ -318,6 +318,19 @@ jobs:
           find staging/out -name '*.map' -delete
           find staging/out -name '*.js' -exec sed -i -E '/^[[:space:]]*(\/\/# sourceMappingURL=|\/\*# sourceMappingURL=)/d' {} +
 
+          # Root package.json — a HARD runtime requirement of every Node
+          # sidecar (extension host, file watcher, pty host):
+          # out/bootstrap-fork.js -> bootstrap-esm.js -> bootstrap-meta.ts
+          # falls back to `require('../package.json')` when the build did not
+          # inline it. Our build/next bundle does not run upstream's
+          # inlineMeta gulp step, so the marker survives into the bundle and
+          # the require executes at boot. dev-37 shipped without it — every
+          # sidecar died with `Cannot find module '../package.json'` before a
+          # single line of entry code ran (no extensions, no terminal, no
+          # file watching, 60s "extension host connect" stalls, crash-retry
+          # loop). Electron ships the same file as resources/app/package.json.
+          cp package.json staging/package.json
+
           # Runtime node_modules the renderer fetches through the
           # vscode-file protocol (wasm/oniguruma, language detection,
           # encoding). The product bundle keeps these as external imports
@@ -357,6 +370,29 @@ jobs:
             fi
           done
 
+          # Runtime node_modules for the Node SIDECARS (extension host, file
+          # watcher, pty host, shared process, agent host). The product
+          # bundle keeps their npm imports external (esbuild
+          # packages:'external'); plain Node resolves them against THIS tree
+          # — Electron would use node_modules.asar. The set is computed from
+          # the actual bundles by scripts/collect-sidecar-node-deps.mjs
+          # (transitive closure included) plus native/dynamic safety pins,
+          # so a new sidecar import cannot silently ship broken. Missing from
+          # node_modules is fatal: the scanner resolved it moments ago.
+          node scripts/collect-sidecar-node-deps.mjs . > .sidecar-deps.txt
+          while read -r pkg; do
+            [ -n "$pkg" ] || continue
+            if [ -d "node_modules/$pkg" ]; then
+              mkdir -p "staging/node_modules/$(dirname "$pkg")"
+              cp -r "node_modules/$pkg" "staging/node_modules/$pkg"
+            else
+              echo "::error::sidecar dependency missing from node_modules: $pkg"
+              exit 1
+            fi
+          done < .sidecar-deps.txt
+          echo "sidecar node_modules: $(grep -c . .sidecar-deps.txt) packages"
+          du -sh staging/node_modules
+
           # Static resources referenced by the workbench.
           cp -r resources staging/resources
 
@@ -395,6 +431,11 @@ jobs:
           for ext_dir in extensions/*/; do
             name=$(basename "$ext_dir")
             case "$name" in *-tests|*-test|copilot|node_modules) continue ;; esac
+            # Only real extensions ship: dirs without a package.json (e.g.
+            # extensions/types — TS typing shims, not an extension) made the
+            # workbench's extension scanner log
+            # "Cannot read ... package.json" on every boot.
+            [ -f "${ext_dir}package.json" ] || { echo "::notice::skipping non-extension dir: $name"; continue; }
             # copilot is NOT staged into the artifact: with its production
             # node_modules (the @github/copilot CLI prebuilds) the client
             # artifact reaches ~365MB and the artifact download between jobs
@@ -486,8 +527,13 @@ jobs:
             staging/css-modules.json \
             staging/out/vs/base/browser/ui/codicons/codicon/codicon.ttf \
             staging/node_modules/vscode-oniguruma/release/onig.wasm \
+            staging/package.json \
             staging/product.json \
             staging/nls.messages.json \
+            staging/node_modules/@parcel/watcher/package.json \
+            staging/node_modules/@vscode/native-watchdog/package.json \
+            staging/node_modules/node-pty/package.json \
+            staging/node_modules/minimist/package.json \
             staging/extensions/theme-defaults/package.json \
             staging/extensions/theme-defaults/themes/dark_plus.json \
             staging/out/vs/workbench/contrib/terminal/common/scripts/shellIntegration.ps1 \
@@ -497,6 +543,21 @@ jobs:
             [ -f "$f" ] || { echo "::error::missing client boot file: $f"; exit 1; }
             echo "ok  $f"
           done
+
+      # Fail here, not on the user's desk: boot the REAL sidecar wrapper with
+      # the entries the Rust shell spawns (file watcher, extension host, pty
+      # host) under the runner's Node (.nvmrc — the same version the shipped
+      # sidecar runtime uses, so native module ABIs match) and assert each
+      # stays alive with no `entry failed`. Catches: a missing client
+      # package.json (dev-37: every sidecar died on
+      # `Cannot find module '../package.json'`), missing external npm deps,
+      # native ABI mismatches — before the installer ever reaches a user.
+      - name: Sidecar boot smoke test
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp src-tauri/sidecar/vstauri-sidecar.mjs staging/vstauri-sidecar.mjs
+          node scripts/sidecar-smoke.mjs staging all
 
       - name: Upload client bundle
         uses: actions/upload-artifact@v4
@@ -572,19 +633,17 @@ jobs:
           test -f src-tauri/resources/client/extensions/copilot/dist/extension.js
           echo "staged copilot:"; du -sh src-tauri/resources/client/extensions/copilot
 
-      # Node.js runtime for the sidecar processes (pinned to the version the
-      # shim advertises as process.versions.node — 22.17.0). NSIS compresses
-      # it; ~80MB raw / ~25MB compressed. 22.14.0 was NOT new enough:
-      # bootstrap-fork.js imports `registerHooks` from node:module, which
-      # only exists from Node 22.15.0 — with 22.14.0 the sidecar died with
-      # "SyntaxError: The requested module 'node:module' does not provide an
-      # export named 'registerHooks'" and the extension host crash-looped
-      # (each respawn flashing a console window).
+      # Node.js runtime for the sidecar processes. MUST stay identical to
+      # .nvmrc (the version CI's `npm ci` compiles native modules against —
+      # @vscode/native-watchdog, @parcel/watcher, node-pty, spdlog, ...).
+      # A mismatch = `NODE_MODULE_VERSION` mismatch at require time and a
+      # dead extension host. 24.18.0 also satisfies bootstrap-fork's
+      # `registerHooks` import (needs >= 22.15).
       - name: Download Node.js runtime for the sidecar
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $version = '22.17.0'
+          $version = '24.18.0'
           New-Item -ItemType Directory -Force -Path src-tauri/resources/node | Out-Null
           $zip = Join-Path $env:TEMP "node-$version.zip"
           Invoke-WebRequest -Uri "https://nodejs.org/dist/v$version/node-v$version-win-x64.zip" -OutFile $zip
@@ -601,6 +660,7 @@ jobs:
             src-tauri/resources/client/out/vs/code/electron-browser/workbench/workbench.html \
             src-tauri/resources/client/out/vs/workbench/workbench.desktop.main.js \
             src-tauri/resources/client/product.json \
+            src-tauri/resources/client/package.json \
             src-tauri/resources/client/nls.messages.json \
             src-tauri/resources/client/extensions/theme-defaults/themes/dark_plus.json \
             src-tauri/resources/client/extensions/copilot/dist/extension.js \

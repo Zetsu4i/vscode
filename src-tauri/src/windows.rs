@@ -220,6 +220,18 @@ pub fn open_workbench_window(
         config["backupPath"] = json!(backup);
     }
 
+    // Per-window logs directory: electron-main creates logsHome/window<N>
+    // before the renderer boots; the log service then writes output_* files
+    // there without mkdir-ing parents itself. Without this the second and
+    // later windows fail their first output-channel write (observed as
+    // FileNotFound unhandled rejections in the dev-37 log).
+    if let Some(logs_path) = config.get("logsPath").and_then(Value::as_str) {
+        if !logs_path.is_empty() {
+            let dir = std::path::Path::new(logs_path).join(format!("window{}", window_id));
+            let _ = std::fs::create_dir_all(&dir);
+        }
+    }
+
     crate::config::set_window_config(&label, config);
     // Close-time persistence (windowsState.json) reads this entry.
     if let Some(config) = crate::config::window_config_for(&label) {

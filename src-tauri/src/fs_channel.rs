@@ -728,7 +728,12 @@ fn systemtime_ms(time: Option<std::time::SystemTime>) -> i64 {
 
 fn fs_error(path: &Path, err: std::io::Error) -> String {
     // FileSystemProviderError shape: message + code name. The renderer maps
-    // known codes (FileNotFound etc.) to friendly behavior.
+    // known codes (FileNotFound etc.) to friendly behavior. The code is
+    // carried in the leading `\u{1}<code>\u{1}` sentinel so ipc.rs
+    // `error_body` can rebuild `error.name` as `"<code> (FileSystemError)"`
+    // — the exact shape `toFileSystemProviderErrorCode` (files.ts) parses.
+    // Without it, missing-file reads are indistinguishable from real errors
+    // and log as loud `[object Object]` failures (mcp.json, tasks.json, ...).
     let code = match err.kind() {
         std::io::ErrorKind::NotFound => "FileNotFound",
         std::io::ErrorKind::PermissionDenied => "NoPermissions",
@@ -736,7 +741,8 @@ fn fs_error(path: &Path, err: std::io::Error) -> String {
         _ => "Unknown",
     };
     format!(
-        "FileSystemError ({}) for '{}': {} [localFilesystem]",
+        "\u{1}{}\u{1}FileSystemError ({}) for '{}': {} [localFilesystem]",
+        code,
         code,
         path.to_string_lossy(),
         err

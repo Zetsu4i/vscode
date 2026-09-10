@@ -480,6 +480,22 @@ fn spawn(
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
 
+    // NLS parity: the product bundle compiles message placeholders out and
+    // reads them back from nls.messages.json at boot (bootstrap-esm.ts
+    // doSetupNLS). Without VSCODE_NLS_CONFIG every localized string in the
+    // sidecar renders as its raw NLS key.
+    let nls_messages = client_root.join("nls.messages.json");
+    if nls_messages.is_file() {
+        let config = serde_json::json!({
+            "locale": "en",
+            "availableLanguages": {},
+            "defaultMessagesFile": nls_messages.to_string_lossy(),
+        });
+        if let Ok(text) = serde_json::to_string(&config) {
+            cmd.env("VSCODE_NLS_CONFIG", text);
+        }
+    }
+
     // Exec argv parity: keep only flags plain Node understands; unknown
     // experimental Electron flags would abort the process at boot.
     if let Some((_, exec_argv)) = &ext_opts {

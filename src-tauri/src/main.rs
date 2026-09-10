@@ -113,6 +113,17 @@ fn main() {
             // IPC call log before the webview starts loading.
             config::init(app.handle());
 
+            // Cold-boot fast path: read the boot-critical client files into
+            // the protocol cache WHILE the webview window is being created
+            // (~0.5-0.9s). The first workbench.html request then hits warm
+            // bytes instead of cold disk + on-request gzip.
+            {
+                let warmer = app.handle().clone();
+                std::thread::spawn(move || {
+                    protocol::warm_boot_files(&warmer);
+                });
+            }
+
             // Same document Electron loads for the desktop workbench, served
             // natively by the vscode-file protocol handler.
             //

@@ -224,6 +224,102 @@ terminal / agents window / hot exit, and share `vstauri.log`.
 
 ---
 
+## Session log (2026-09-11, round 3 — dev build 37 triage: every sidecar dead)
+
+User report on dev build 37: still slow to start, "nothing is working",
+AI chat still requires login, "far worse than the original vscode". The
+shared `vstauri.log` shows the workbench shell itself boots fine
+(logger → window → `renderer connected` in ~3s) — but **all three Node
+sidecars die on the same first line of bootstrap**:
+
+    [sidecar:...] entry failed: Error: Cannot find module '../package.json'
+    Require stack: I:\tools\VSTauri\resources\client\out\bootstrap-fork.js
+
+Chain: `bootstrap-fork.js` → `bootstrap-esm.js` → `bootstrap-meta.ts`
+falls back to `require('../package.json')` when the build did not inline
+it (the `BUILD_INSERT_PACKAGE_CONFIGURATION` marker). Upstream's
+`inlineMeta` runs in the gulp pipeline; our `build/next bundle` does
+not, so the marker survives into the product bundle and the require
+executes at boot — against a `resources/client/` that never shipped a
+`package.json`. Downstream effects, all observed in the log:
+
+* **Extension host**: crash-retry loop (4+ spawns per window), "The
+  local extension host took longer than 60s to connect", "terminated
+  unexpectedly 3 times within the last 5 minutes" — no extensions at
+  all, which is also why the AI chat shows a sign-in wall (the BYOK
+  copilot build never activates).
+* **File watcher** (`watcherMain`): dead → no file watching.
+* **Pty host** (`ptyHostMain`): dead → integrated terminal unusable.
+* The retry storm of dead Node processes is a large share of the
+  perceived "slow as hell" startup.
+
+Fixes this round:
+
+1. **Ship `package.json` at the client root** (CI `Assemble client
+   bundle` step). Exact parity with Electron's
+   `resources/app/package.json`.
+2. **Ship the sidecar node_modules closure** — the product bundle keeps
+   npm imports external (`packages: 'external'`), and plain Node
+   (no node_modules.asar support — that hook only arms under
+   ELECTRON_RUN_AS_NODE/electron) resolves them against the real tree:
+   `minimist`, `@vscode/native-watchdog`, `@parcel/watcher`,
+   `node-pty`, `@vscode/spdlog`, `@vscode/proxy-agent`, ... New
+   `scripts/collect-sidecar-node-deps.mjs` scans the actual
+   `out-client` bundles for external specifiers, resolves the
+   transitive closure (incl. native/dynamic safety pins), and the CI
+   copies exactly that set. Asserted in `Assert client boot files`.
+3. **Node runtime realigned 22.17.0 → 24.18.0** (= `.nvmrc`, the
+   version CI's `npm ci` compiles native modules against). A mismatch
+   would have been the NEXT crash: `@vscode/native-watchdog`,
+   `@parcel/watcher`, `node-pty`, spdlog are gyp/NAPI builds whose ABI
+   must match the sidecar runtime. shim.js + config.rs version payload
+   updated to match.
+4. **CI sidecar boot smoke test** (`scripts/sidecar-smoke.mjs`): after
+   assembly, the runner boots the real wrapper with
+   extensionHostProcess / watcherMain / ptyHostMain and asserts they
+   stay alive with no `entry failed`. This class of bug now fails the
+   build, not the user's first launch.
+5. **IPC error frames `[203]` → `[202]`** (ipc.rs): ResponseType 203 is
+   `PromiseErrorObj` (rejects with the RAW object), 202 is `PromiseError`
+   (reconstructs a real `Error` with `name`). We sent 203 with an
+   `{message,name,stack}` body, so every rejection surfaced as
+   "[object Object]" with no name — `toFileSystemProviderErrorCode`
+   (files.ts parses `error.name`) saw "Unknown" for every FS error and
+   missing mcp.json/tasks.json/extensions.json logged as loud errors
+   instead of being silently handled. `fs_channel::fs_error` now carries
+   the provider error code (`FileNotFound` etc.) through a `\u{1}`
+   sentinel; `ipc::error_body` rebuilds `name` as
+   `"<code> (FileSystemError)"` — the exact shape
+   `markAsFileSystemProviderError` produces.
+6. **Aux windows fixed** (`eAt.resolveWindowId` crash reading
+   `undefined.ipcRenderer`): WebView2 popups install `window.vscode`
+   through the async document-created init script AFTER `window.open()`
+   resolves in the opener (Electron guarantees preload-before-return).
+   Patched `auxiliaryWindowService.ts` (electron-browser) to poll for
+   the globals with a 10s deadline before invoking
+   `vscode:registerAuxiliaryWindow`.
+7. **Per-window logs dirs**: `open_workbench_window` now creates
+   `logsPath/window<N>` (electron-main parity) — the second window's
+   output channels were failing their first write (FileNotFound
+   unhandled rejections in the log).
+8. **`extensions/types` no longer staged** — dirs without a
+   `package.json` are skipped by the staging loop (it is a TS typing
+   shim, not an extension; the scanner logged a read error every boot).
+9. **NLS for sidecars**: spawn now sets `VSCODE_NLS_CONFIG`
+   (`defaultMessagesFile` = bundled `nls.messages.json`) so the `--nls`
+   product bundle resolves message strings instead of raw keys.
+10. **Cold-boot warm-up**: `protocol::warm_boot_files` reads
+    workbench.html/js/main.js/css/codicon into the in-memory body cache
+    on a background thread while the window is still being created.
+
+Known remaining (next log): the "github default-account timeout" noise
+without sign-in is expected; `--experimental-network-inspection`
+execArgv drop warning is cosmetic; opening a file via File→Open reloads
+the whole workbench window (upstream delivers `vscode:open-files` to the
+live window instead — candidate for the next perf round).
+
+---
+
 ## Phase 0: Repository Baseline and Guardrails
 
 ### Status: 🟦 In progress

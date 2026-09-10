@@ -408,7 +408,11 @@
     execPath: '',
     cwd: '/',
     versions: {
-      node: '22.17.0',
+      // Keep in sync with the runtime shipped under resources/node and
+      // .nvmrc (the version CI compiles native modules against — an ABI
+      // mismatch would make @vscode/native-watchdog, node-pty, @parcel/
+      // watcher etc. fail to load in the sidecars).
+      node: '24.18.0',
       v8: '13.0.0',
       electron: '37.2.0',
       chrome: '138.0.7204.100'
