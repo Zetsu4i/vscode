@@ -661,13 +661,25 @@ fn route_channel_request(
         ("browserView", _) => Ok(Value::Null),
 
         // fileManagedSettings: ManagedSettingsChannel (policy/managed
-        // settings). No enterprise policy in the shell: Electron's
-        // empty-policy answer is `null` content — the renderer then behaves
-        // like no managed settings exist. Previously these rejected and
-        // surfaced as boot errors on every start.
-        ("fileManagedSettings", "getManagedSettings") => Ok(Value::Null),
-        ("fileManagedSettings", "getRawManagedSettings") => Ok(Value::Null),
-        ("fileManagedSettings", _) => Ok(Value::Null),
+        // settings). No enterprise policy in the shell — parity with
+        // Electron's "no managed settings exist" state. The answer MUST be
+        // an empty object, not null: the renderer's
+        // FileManagedSettingsChannelClient assigns the response directly
+        // into `rawManagedSettings`/`managedSettings`, and
+        // `hasRawManagedSettings(data)` does `data !== undefined &&
+        // Object.keys(data).length > 0` — a JSON null passes the first
+        // check and then throws `Object.keys(null)` ("Cannot convert
+        // undefined or null to object"), which rejects
+        // AccountPolicyService.updatePolicyDefinitions, aborts
+        // WorkspaceService.initializeConfiguration, and leaves the
+        // configuration model empty — so `getValue('editor')` returns
+        // undefined, `restoreFontInfo` crashes on `.fontFamily` inside
+        // renderWorkbench, and the window stays blank (dev build 36
+        // regression). `{}` keeps every consumer on its "no policies"
+        // code path.
+        ("fileManagedSettings", "getManagedSettings") => Ok(json!({})),
+        ("fileManagedSettings", "getRawManagedSettings") => Ok(json!({})),
+        ("fileManagedSettings", _) => Ok(json!({})),
 
         // Everything else is a faithful "channel not registered" rejection —
         // same outcome as Electron's 1s pending-request timeout, and the call

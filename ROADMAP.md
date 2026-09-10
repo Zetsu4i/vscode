@@ -168,6 +168,60 @@ into resources/client in the bundle job. NEXT for the user: install the
 build, exercise terminal / hot exit / agents window / multi-window, and
 share `vstauri.log` — the extension host boot is the next debug surface.
 
+## Session log (2026-09-10, round 2 — dev build 36 first-run triage)
+
+User report on dev build 36: blank screen after the loading animation,
+slow load, and cmd.exe console popups. The shared `vstauri.log` traced
+every symptom to five concrete defects — no architecture change needed
+(a React workbench rebuild would trade extension compatibility for
+months of work; the workbench itself boots in ~2.7s under the current
+shell once it isn't crashing):
+
+1. **Blank screen (the blocker)** — `fileManagedSettings` answered
+   JSON `null`; the renderer stores it into `rawManagedSettings`, and
+   `hasRawManagedSettings` does `data !== undefined && Object.keys(data)`
+   — so `Object.keys(null)` throws, `AccountPolicyService` rejects,
+   `WorkspaceService.initializeConfiguration` aborts with an empty
+   configuration model, `getValue('editor')` returns `undefined`, and
+   `Workbench.restoreFontInfo` dies on `.fontFamily` inside
+   `renderWorkbench`. One null → three visible crashes (policy
+   `Object.keys`, terminal `Object.entries(undefined)` in
+   `_updateContributedProfiles`, fontInfo) and a permanently blank
+   window. Fix: the channel now returns `{}` (Electron "no managed
+   settings" parity) — ipc.rs.
+2. **Extension host dead + console popups** — the bundled Node 22.14.0
+   cannot load `bootstrap-fork.js`, which imports `registerHooks` from
+   `node:module` (first shipped in Node 22.15.0): every spawn died with
+   `SyntaxError ... 'registerHooks'` and the workbench's retry loop
+   respawned it (3+ times per minute, each flashing a console window).
+   Fix: runtime pinned to 22.17.0 (CI download, shim `process.versions`,
+   config.rs window payload).
+3. **Console popups for helpers** — none of the shell's subprocess
+   spawns set `CREATE_NO_WINDOW`. Fix: a `util::no_console_window`
+   helper applied to the sidecar spawn and terminal_channel's
+   `wsl.exe`/`netstat`/`taskkill` (nativeHost already had it for
+   taskkill; explorer/ShellExecuteW don't spawn consoles).
+4. **`createWorker expects an object`** — ProxyChannel serializes method
+   calls as `call(command, [args])`, so `utilityProcessWorker.createWorker`
+   arrives as `[{process, reply}]`; the handler expected the bare object
+   (the `start` handler already unwrapped). Fix: `unwrap_proxy_arg`
+   applied to `createWorker`/`disposeWorker` — utility-process workers
+   (file watcher, language detection, output spool) can boot now.
+5. **Slow cold start** — gzip level 6 on the ~10 MiB
+   `workbench.desktop.main.js` cost ~1s of single-thread CPU on first
+   request (in-process COM copies are cheaper than compress-CPU at that
+   size). Fix: level 1 + skip compression for bodies > 4 MiB.
+
+Remaining known noise (not fixed this round, tracked for the next log):
+`extensions/types` package.json missing from the staged tree; user
+extension scan surfaces raw FileNotFound instead of a graceful empty
+state (error marshaling shape); the `github` default-account timeout is
+expected without sign-in; `--experimental-network-inspection` execArgv
+warning on every ext-host spawn (cosmetic).
+
+NEXT for the user: install the next dev build, boot, exercise
+terminal / agents window / hot exit, and share `vstauri.log`.
+
 ---
 
 ## Phase 0: Repository Baseline and Guardrails

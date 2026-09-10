@@ -1394,7 +1394,8 @@ fn get_wsl_path(args: &[Value]) -> Result<Value, String> {
             return Err(format!("localPty: getWslPath unknown direction {}", other));
         }
     };
-    let output = std::process::Command::new("wsl.exe")
+    let mut wsl = std::process::Command::new("wsl.exe");
+    let output = crate::util::no_console_window(&mut wsl)
         .arg("-e")
         .arg("wslpath")
         .arg(flag)
@@ -1419,7 +1420,8 @@ fn free_port_kill_process(port: &Value) -> Result<Value, String> {
         return Err("localPty: freePortKillProcess expects a port".to_string());
     }
     let netstat = if cfg!(windows) {
-        std::process::Command::new("netstat").arg("-ano").output()
+        let mut cmd = std::process::Command::new("netstat");
+        crate::util::no_console_window(&mut cmd).arg("-ano").output()
     } else {
         std::process::Command::new("sh")
             .arg("-c")
@@ -1458,7 +1460,8 @@ fn free_port_kill_process(port: &Value) -> Result<Value, String> {
     };
 
     if cfg!(windows) {
-        std::process::Command::new("taskkill")
+        let mut cmd = std::process::Command::new("taskkill");
+        crate::util::no_console_window(&mut cmd)
             .arg("/PID")
             .arg(&pid)
             .arg("/T")

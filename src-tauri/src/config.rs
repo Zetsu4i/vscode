@@ -421,7 +421,7 @@ fn build(app: &tauri::AppHandle) -> Value {
             "execPath": exec_path,
             "cwd": cwd,
             "versions": {
-                "node": "22.14.0",
+                "node": "22.17.0",
                 "v8": "13.0.0",
                 "electron": "37.2.0",
                 "chrome": "138.0.7204.100"

@@ -130,6 +130,16 @@ static EXIT_LEDGER: LazyLock<Mutex<HashMap<u64, (i64, String)>>> =
 // ---------------------------------------------------------------------------
 
 /// `extensionHostStarter` + `utilityProcessWorker` + friends.
+///
+/// ProxyChannel serializes every method call as `call(command, [args...])`,
+/// so single-parameter methods arrive wrapped in a one-element array:
+/// `createWorker(config)` comes in as `[{process, reply}]`. The `start`
+/// handler already accounts for that; unwrap here so the config-based
+/// handlers (`createWorker`/`disposeWorker`) see the object itself.
+fn unwrap_proxy_arg(arg: &Value) -> &Value {
+    arg.as_array().and_then(|a| a.first()).unwrap_or(arg)
+}
+
 pub fn handle(
     app: Option<&tauri::AppHandle>,
     window_label: &str,
@@ -140,6 +150,7 @@ pub fn handle(
     match command {
         // ---- IUtilityProcessWorkerService ----
         "createWorker" => {
+            let arg = unwrap_proxy_arg(arg);
             let config = arg.as_object().ok_or("createWorker expects an object")?;
             let module_id = config
                 .get("process")
@@ -199,6 +210,7 @@ pub fn handle(
             Ok(Value::Null)
         }
         "disposeWorker" => {
+            let arg = unwrap_proxy_arg(arg);
             let config = arg.as_object().ok_or("disposeWorker expects an object")?;
             let module_id = config
                 .get("process")
@@ -446,6 +458,17 @@ fn spawn(
     let id = NEXT_PROCESS_ID.fetch_add(1, Ordering::SeqCst);
 
     let mut cmd = Command::new(&node_exe);
+    // Never flash a console window for the Node sidecar. Every spawn on
+    // Windows without CREATE_NO_WINDOW opens (and closes, on exit) a
+    // visible cmd host — with the extension host's crash-retry loop that
+    // used to pop a console every few seconds. Applies to all helper
+    // processes spawned by the shell (see also terminal_channel.rs and
+    // native_host.rs).
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+    }
     cmd.arg(&wrapper)
         .current_dir(client_root)
         .env("VSCODE_ESM_ENTRYPOINT", entry_module)

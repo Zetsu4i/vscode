@@ -179,16 +179,28 @@ fn cache_insert(
 }
 
 /// gzip a compressible body once. Returns the compressed bytes, or an empty
-/// Vec when compression is not worthwhile (tiny, or already-compressed
-/// media types — re-compressing binaries wastes CPU for ~0 bytes saved).
+/// Vec when compression is not worthwhile (tiny, already-compressed
+/// media types — re-compressing binaries wastes CPU for ~0 bytes saved —
+/// or oversized bodies).
+///
+/// Sizing notes: the response path is an in-process WebView2 custom-scheme
+/// handler, so the "network" is a COM byte copy that runs at multiple GB/s.
+/// Compressing is only worth it while compress-CPU is cheaper than the
+/// bytes it saves. That inverts for big payloads: gzip level 6 on the ~10 MiB
+/// workbench.desktop.main.js costs ~1s of single-thread CPU on a typical
+/// machine (level 1 is ~3-5x faster for ~10% larger output) — and past
+/// ~4 MiB even level 1 costs more than the copy it saves. Dev build 36
+/// spent ~1.35s serving the main bundle on cold boot; capping the size and
+/// dropping to level 1 cuts most of that while keeping the ~1300 small
+/// module responses cheap.
 fn gzip_if_worthwhile(mime: &str, raw: &[u8]) -> Vec<u8> {
-    if raw.len() < 1024 || !compressible_mime(mime) {
+    if raw.len() < 1024 || raw.len() > 4 * 1024 * 1024 || !compressible_mime(mime) {
         return Vec::new();
     }
     use flate2::write::GzEncoder;
     use flate2::Compression;
     use std::io::Write;
-    let mut encoder = GzEncoder::new(Vec::with_capacity(raw.len() / 3), Compression::new(6));
+    let mut encoder = GzEncoder::new(Vec::with_capacity(raw.len() / 3), Compression::new(1));
     if encoder.write_all(raw).is_err() {
         return Vec::new();
     }

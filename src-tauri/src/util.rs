@@ -1,6 +1,20 @@
 //! Small utilities shared across the shell: percent-decoding, URI path
 //! encoding and pseudo-random identifier generation (no extra crates).
 
+/// Apply `CREATE_NO_WINDOW` on Windows so helper processes (node sidecar,
+/// wsl.exe, netstat, taskkill, ...) never flash a console host window.
+/// No-op on other platforms. Chainable: `no_console_window(&mut cmd).arg(..)`.
+pub fn no_console_window(cmd: &mut std::process::Command) -> &mut std::process::Command {
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+    }
+    #[cfg(not(target_os = "windows"))]
+    let _ = cmd;
+    cmd
+}
+
 /// Decode `%XX` escapes in a URI path segment sequence. `+` is left as-is
 /// (this is path decoding, not form decoding).
 pub fn percent_decode(input: &str) -> String {

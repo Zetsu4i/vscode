@@ -573,13 +573,18 @@ jobs:
           echo "staged copilot:"; du -sh src-tauri/resources/client/extensions/copilot
 
       # Node.js runtime for the sidecar processes (pinned to the version the
-      # shim advertises as process.versions.node — 22.14.0). NSIS compresses
-      # it; ~80MB raw / ~25MB compressed.
+      # shim advertises as process.versions.node — 22.17.0). NSIS compresses
+      # it; ~80MB raw / ~25MB compressed. 22.14.0 was NOT new enough:
+      # bootstrap-fork.js imports `registerHooks` from node:module, which
+      # only exists from Node 22.15.0 — with 22.14.0 the sidecar died with
+      # "SyntaxError: The requested module 'node:module' does not provide an
+      # export named 'registerHooks'" and the extension host crash-looped
+      # (each respawn flashing a console window).
       - name: Download Node.js runtime for the sidecar
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $version = '22.14.0'
+          $version = '22.17.0'
           New-Item -ItemType Directory -Force -Path src-tauri/resources/node | Out-Null
           $zip = Join-Path $env:TEMP "node-$version.zip"
           Invoke-WebRequest -Uri "https://nodejs.org/dist/v$version/node-v$version-win-x64.zip" -OutFile $zip
