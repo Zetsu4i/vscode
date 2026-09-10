@@ -519,11 +519,15 @@ fn spawn(
     }
 
     // Extension host env mixin (opts.env — a full process env from the
-    // renderer's shellEnvironmentService + markers).
+    // renderer's shellEnvironmentService + markers). VSCODE_NLS_CONFIG is
+    // owned by this spawn (the renderer env never carries a valid one).
     if let Some((env, _)) = &ext_opts {
         if let Some(map) = env.as_object() {
             for (key, value) in map {
                 if let Some(text) = value.as_str() {
+                    if key == "VSCODE_NLS_CONFIG" {
+                        continue;
+                    }
                     if key.starts_with("VSCODE_") || key == "ELECTRON_RUN_AS_NODE" {
                         cmd.env(key, text);
                     }
